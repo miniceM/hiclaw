@@ -55,29 +55,6 @@ ln -sf "${WORKSPACE}/openclaw.json" /root/.openclaw/openclaw.json
 
 log "Worker config pulled successfully"
 
-# ============================================================
-# Step 2.5: Check for builtin updates from Manager-published templates
-# ============================================================
-log "Updating builtins from shared/builtins/worker/..."
-
-# AGENTS.md: overwrite from builtins (Manager-managed, no user customization)
-mc cp "hiclaw/hiclaw-storage/shared/builtins/worker/AGENTS.md" \
-    "${WORKSPACE}/AGENTS.md" 2>/dev/null \
-    && mc cp "${WORKSPACE}/AGENTS.md" \
-        "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/AGENTS.md" 2>/dev/null \
-    || true
-
-# skills/: refresh each assigned skill from builtins if a builtin source exists
-# Do NOT add/remove skills — that is the Manager's job via push-worker-skills.sh
-for _skill_name in $(ls "${WORKSPACE}/skills/" 2>/dev/null); do
-    mc mirror "hiclaw/hiclaw-storage/shared/builtins/worker/skills/${_skill_name}/" \
-        "${WORKSPACE}/skills/${_skill_name}/" --overwrite 2>/dev/null \
-        && find "${WORKSPACE}/skills/${_skill_name}" -name '*.sh' -exec chmod +x {} + 2>/dev/null \
-        && mc mirror "${WORKSPACE}/skills/${_skill_name}/" \
-            "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/skills/${_skill_name}/" --overwrite 2>/dev/null \
-        || true
-done
-
 # Ensure hiclaw-sync symlink is functional (wrapper script calls workspace path)
 ln -sf "${WORKSPACE}/skills/file-sync/scripts/hiclaw-sync.sh" /usr/local/bin/hiclaw-sync 2>/dev/null || true
 

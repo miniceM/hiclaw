@@ -1,16 +1,18 @@
 #!/bin/bash
-# upgrade-builtins.sh - Upgrade Manager workspace builtin files and publish Worker builtins to MinIO
+# upgrade-builtins.sh - Upgrade Manager workspace builtin files and sync Worker builtins to MinIO
 #
 # Called by start-manager-agent.sh on first boot or when image version changes.
 # Strategy:
 #   - .md files: merge (replace builtin section, preserve user content below end marker)
 #   - scripts/ and references/ dirs: always overwrite from image
-#   - Worker builtins: publish to shared/builtins/worker/ for Workers to self-check
+#   - Worker builtins: sync directly to each registered worker's MinIO workspace
+#   - Workers no longer need to pull from shared/builtins/worker/ on startup
 
 set -e
 
 AGENT_SRC="/opt/hiclaw/agent"
 WORKSPACE="${HOME}/manager-workspace"
+REGISTRY="${WORKSPACE}/workers-registry.json"
 IMAGE_VERSION=$(cat "${AGENT_SRC}/.builtin-version" 2>/dev/null || echo "unknown")
 
 BUILTIN_START="<!-- hiclaw-builtin-start -->"
@@ -192,21 +194,79 @@ else
 fi
 
 # ============================================================
-# Step 4: Write installed version
+# Step 4: Sync builtins to all registered workers' MinIO workspaces
+# This ensures workers get builtin updates directly in their workspace,
+# eliminating the need for workers to pull from shared/builtins/worker/ on startup.
 # ============================================================
-echo "${IMAGE_VERSION}" > "${WORKSPACE}/.builtin-version"
-log "Step 4: Installed version: ${IMAGE_VERSION}"
+log "Step 4: Syncing builtins to registered workers' workspaces..."
+
+if [ -d "${WORKER_AGENT_SRC}" ] && mc alias ls hiclaw > /dev/null 2>&1; then
+    # Get list of registered workers
+    REGISTERED_WORKERS=""
+    if [ -f "${REGISTRY}" ]; then
+        REGISTERED_WORKERS=$(jq -r '.workers | keys[]' "${REGISTRY}" 2>/dev/null || true)
+    fi
+
+    if [ -n "${REGISTERED_WORKERS}" ]; then
+        for _worker_name in ${REGISTERED_WORKERS}; do
+            [ -z "${_worker_name}" ] && continue
+            log "  Syncing builtins to worker: ${_worker_name}"
+
+            # Push AGENTS.md
+            mc cp "${WORKER_AGENT_SRC}/AGENTS.md" \
+                "hiclaw/hiclaw-storage/agents/${_worker_name}/AGENTS.md" 2>/dev/null \
+                && log "    Updated AGENTS.md" \
+                || log "    WARNING: Failed to sync AGENTS.md"
+
+            # Push all builtin skills from worker-agent/skills/ (these are default for all workers)
+            if [ -d "${WORKER_AGENT_SRC}/skills" ]; then
+                for _skill_dir in "${WORKER_AGENT_SRC}/skills"/*/; do
+                    [ ! -d "${_skill_dir}" ] && continue
+                    _skill_name=$(basename "${_skill_dir}")
+                    mc mirror "${_skill_dir}" \
+                        "hiclaw/hiclaw-storage/agents/${_worker_name}/skills/${_skill_name}/" --overwrite 2>/dev/null \
+                        && log "    Updated builtin skill: ${_skill_name}" \
+                        || log "    WARNING: Failed to sync builtin skill ${_skill_name}"
+                done
+            fi
+
+            # Push all worker-skills that the worker has assigned
+            for _skill_name in $(jq -r --arg w "${_worker_name}" \
+                '.workers[$w].skills // [] | .[]' "${REGISTRY}" 2>/dev/null); do
+                [ -z "${_skill_name}" ] && continue
+
+                _skill_src="${AGENT_SRC}/worker-skills/${_skill_name}"
+                if [ -d "${_skill_src}" ]; then
+                    mc mirror "${_skill_src}/" \
+                        "hiclaw/hiclaw-storage/agents/${_worker_name}/skills/${_skill_name}/" --overwrite 2>/dev/null \
+                        && log "    Updated skill: ${_skill_name}" \
+                        || log "    WARNING: Failed to sync skill ${_skill_name}"
+                fi
+            done
+        done
+        log "  Synced builtins to $(echo "${REGISTERED_WORKERS}" | wc -w) worker(s)"
+    else
+        log "  No workers registered, skipping sync"
+    fi
+else
+    log "  Skipping worker sync (worker-agent dir not found or mc not configured)"
+fi
 
 # ============================================================
-# Step 5: Mark that workers need builtin update notification
+# Step 5: Write installed version
+# ============================================================
+echo "${IMAGE_VERSION}" > "${WORKSPACE}/.builtin-version"
+log "Step 5: Installed version: ${IMAGE_VERSION}"
+
+# ============================================================
+# Step 6: Mark that workers need builtin update notification
 # ============================================================
 # Check if any workers are registered; if so, mark for post-startup notification
-REGISTRY="${WORKSPACE}/workers-registry.json"
 if [ -f "${REGISTRY}" ] && jq -e '.workers | length > 0' "${REGISTRY}" > /dev/null 2>&1; then
     touch "${WORKSPACE}/.upgrade-pending-worker-notify"
-    log "Step 5: Marked for worker skill notification (workers registered)"
+    log "Step 6: Marked for worker skill notification (workers registered)"
 else
-    log "Step 5: No workers registered, skipping notification mark"
+    log "Step 6: No workers registered, skipping notification mark"
 fi
 
 log "Upgrade complete (version: ${IMAGE_VERSION})"

@@ -2,15 +2,16 @@
 # hiclaw-install.sh - One-click installation for HiClaw Manager and Worker
 #
 # Usage:
-#   ./hiclaw-install.sh manager                  # Interactive Manager setup
+#   ./hiclaw-install.sh                  # Interactive Manager setup (default)
+#   ./hiclaw-install.sh manager          # Same as above (explicit)
 #   ./hiclaw-install.sh worker --name <name> ...  # Worker installation
 #
 # All interactive prompts can be pre-set via environment variables.
 # Minimal install (only LLM key required):
-#   HICLAW_LLM_API_KEY=sk-xxx ./hiclaw-install.sh manager
+#   HICLAW_LLM_API_KEY=sk-xxx ./hiclaw-install.sh
 #
 # Non-interactive mode (all defaults, no prompts):
-#   HICLAW_NON_INTERACTIVE=1 HICLAW_LLM_API_KEY=sk-xxx ./hiclaw-install.sh manager
+#   HICLAW_NON_INTERACTIVE=1 HICLAW_LLM_API_KEY=sk-xxx ./hiclaw-install.sh
 #
 # Environment variables:
 #   HICLAW_NON_INTERACTIVE    Skip all prompts, use defaults  (default: 0)
@@ -18,7 +19,7 @@
 #   HICLAW_DEFAULT_MODEL      Default model       (default: qwen3.5-plus)
 #   HICLAW_LLM_API_KEY        LLM API key         (required)
 #   HICLAW_ADMIN_USER         Admin username       (default: admin)
-#   HICLAW_ADMIN_PASSWORD     Admin password       (auto-generated if not set)
+#   HICLAW_ADMIN_PASSWORD     Admin password       (auto-generated if not set, min 8 chars)
 #   HICLAW_MATRIX_DOMAIN      Matrix domain        (default: matrix-local.hiclaw.io:18080)
 #   HICLAW_MOUNT_SOCKET       Mount container runtime socket (default: 1)
 #   HICLAW_DATA_DIR           Host directory for persistent data (default: docker volume)
@@ -175,8 +176,179 @@ install_manager() {
     log "Registry: ${HICLAW_REGISTRY}"
     log ""
 
-    # Load existing env file as fallback (shell env vars take priority)
+    # Check if Manager is already installed (by env file existence)
     local existing_env="${HICLAW_ENV_FILE:-./hiclaw-manager.env}"
+    if [ -f "${existing_env}" ]; then
+        log "Existing Manager installation detected (env file: ${existing_env})"
+        
+        # Check for running containers
+        local running_manager=""
+        local running_workers=""
+        local existing_workers=""
+        if docker ps --format '{{.Names}}' | grep -q "^hiclaw-manager$"; then
+            running_manager="hiclaw-manager"
+        fi
+        running_workers=$(docker ps --format '{{.Names}}' | grep "^hiclaw-worker-" || true)
+        existing_workers=$(docker ps -a --format '{{.Names}}' | grep "^hiclaw-worker-" || true)
+        
+        # Non-interactive mode: default to upgrade without rebuilding workers
+        if [ "${HICLAW_NON_INTERACTIVE}" = "1" ]; then
+            log "Non-interactive mode: performing in-place upgrade..."
+            UPGRADE_CHOICE="upgrade"
+            REBUILD_WORKERS="no"
+        else
+            echo ""
+            echo "Choose an action:"
+            echo "  1) In-place upgrade (keep data, workspace, env file)"
+            echo "  2) Clean reinstall (remove all data, start fresh)"
+            echo "  3) Cancel"
+            echo ""
+            read -p "Enter choice [1/2/3]: " UPGRADE_CHOICE
+            UPGRADE_CHOICE="${UPGRADE_CHOICE:-1}"
+        fi
+
+        case "${UPGRADE_CHOICE}" in
+            1|upgrade)
+                log "Performing in-place upgrade..."
+                
+                # Ask about rebuilding workers (only if there are existing workers)
+                if [ -n "${existing_workers}" ]; then
+                    if [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
+                        echo ""
+                        echo -e "\033[36mWorker containers found: $(echo ${existing_workers} | tr '\n' ' ')\033[0m"
+                        echo ""
+                        echo -e "\033[33mRebuild worker containers?\033[0m"
+                        echo -e "\033[33m  - Only needed if the worker IMAGE has changed (e.g., OpenClaw version upgrade)\033[0m"
+                        echo -e "\033[33m  - NOT needed if only Manager files changed (Manager will auto-push updates to workers)\033[0m"
+                        echo ""
+                        read -p "Rebuild workers? [y/N]: " REBUILD_WORKERS
+                        REBUILD_WORKERS="${REBUILD_WORKERS:-n}"
+                    else
+                        REBUILD_WORKERS="no"
+                    fi
+                fi
+                
+                # Warn about running containers
+                if [ -n "${running_manager}" ]; then
+                    echo ""
+                    echo -e "\033[33m⚠️  Manager container will be stopped and recreated.\033[0m"
+                fi
+                
+                if [ "${REBUILD_WORKERS}" = "y" ] || [ "${REBUILD_WORKERS}" = "Y" ]; then
+                    if [ -n "${running_workers}" ]; then
+                        echo -e "\033[33m⚠️  All worker containers will be stopped and recreated.\033[0m"
+                    fi
+                fi
+                
+                if [ -n "${running_manager}" ] || [ "${REBUILD_WORKERS}" = "y" ] || [ "${REBUILD_WORKERS}" = "Y" ]; then
+                    if [ "${HICLAW_NON_INTERACTIVE}" != "1" ]; then
+                        echo ""
+                        read -p "Continue? [y/N]: " CONFIRM_STOP
+                        if [ "${CONFIRM_STOP}" != "y" ] && [ "${CONFIRM_STOP}" != "Y" ]; then
+                            log "Installation cancelled."
+                            exit 0
+                        fi
+                    fi
+                fi
+                
+                # Stop and remove manager container
+                if [ -n "${running_manager}" ] || docker ps -a --format '{{.Names}}' | grep -q "^hiclaw-manager$"; then
+                    log "Stopping and removing existing manager container..."
+                    docker stop hiclaw-manager 2>/dev/null || true
+                    docker rm hiclaw-manager 2>/dev/null || true
+                fi
+                
+                # Stop and remove worker containers only if user chose to rebuild
+                if [ "${REBUILD_WORKERS}" = "y" ] || [ "${REBUILD_WORKERS}" = "Y" ]; then
+                    if [ -n "${existing_workers}" ]; then
+                        log "Stopping and removing existing worker containers..."
+                        for w in ${existing_workers}; do
+                            docker stop "${w}" 2>/dev/null || true
+                            docker rm "${w}" 2>/dev/null || true
+                            log "  Removed: ${w}"
+                        done
+                    fi
+                fi
+                # Continue with installation using existing config
+                ;;
+            2|reinstall)
+                log "Performing clean reinstall..."
+                
+                # Get existing workspace directory from env file
+                local existing_workspace=""
+                if [ -f "${existing_env}" ]; then
+                    existing_workspace=$(grep '^HICLAW_WORKSPACE_DIR=' "${existing_env}" 2>/dev/null | cut -d= -f2-)
+                fi
+                if [ -z "${existing_workspace}" ]; then
+                    existing_workspace="${HOME}/hiclaw-manager"
+                fi
+                
+                # Warn about running containers
+                echo ""
+                echo -e "\033[33m⚠️  The following running containers will be stopped:\033[0m"
+                [ -n "${running_manager}" ] && echo -e "\033[33m   - ${running_manager} (manager)\033[0m"
+                for w in ${running_workers}; do
+                    echo -e "\033[33m   - ${w} (worker)\033[0m"
+                done
+                echo ""
+                echo -e "\033[31m⚠️  WARNING: This will DELETE the following:\033[0m"
+                echo -e "\033[31m   - Docker volume: hiclaw-data\033[0m"
+                echo -e "\033[31m   - Env file: ${existing_env}\033[0m"
+                echo -e "\033[31m   - Manager workspace: ${existing_workspace}\033[0m"
+                echo -e "\033[31m   - All worker containers\033[0m"
+                echo ""
+                echo -e "\033[31mTo confirm deletion, please type the workspace path:\033[0m"
+                echo -e "\033[31m  ${existing_workspace}\033[0m"
+                echo ""
+                read -p "Type the path to confirm (or press Ctrl+C to cancel): " CONFIRM_PATH
+                
+                if [ "${CONFIRM_PATH}" != "${existing_workspace}" ]; then
+                    error "Path mismatch. Aborting reinstall. Input: '${CONFIRM_PATH}', Expected: '${existing_workspace}'"
+                fi
+                
+                log "Confirmed. Cleaning up..."
+                
+                # Stop and remove manager container
+                docker stop hiclaw-manager 2>/dev/null || true
+                docker rm hiclaw-manager 2>/dev/null || true
+                
+                # Stop and remove all worker containers
+                for w in $(docker ps -a --format '{{.Names}}' | grep "^hiclaw-worker-" || true); do
+                    docker stop "${w}" 2>/dev/null || true
+                    docker rm "${w}" 2>/dev/null || true
+                    log "  Removed worker: ${w}"
+                done
+                
+                # Remove Docker volume
+                if docker volume ls -q | grep -q "^hiclaw-data$"; then
+                    log "Removing Docker volume: hiclaw-data"
+                    docker volume rm hiclaw-data 2>/dev/null || log "  Warning: Could not remove volume (may have references)"
+                fi
+                
+                # Remove workspace directory
+                if [ -d "${existing_workspace}" ]; then
+                    log "Removing workspace directory: ${existing_workspace}"
+                    rm -rf "${existing_workspace}" || error "Failed to remove workspace directory"
+                fi
+                
+                # Remove env file
+                if [ -f "${existing_env}" ]; then
+                    log "Removing env file: ${existing_env}"
+                    rm -f "${existing_env}"
+                fi
+                
+                log "Cleanup complete. Starting fresh installation..."
+                # Clear any loaded environment variables to start fresh
+                unset HICLAW_WORKSPACE_DIR
+                ;;
+            3|cancel|*)
+                log "Installation cancelled."
+                exit 0
+                ;;
+        esac
+    fi
+
+    # Load existing env file as fallback (shell env vars take priority)
     if [ -f "${existing_env}" ]; then
         log "Loading existing config from ${existing_env} (shell env vars take priority)..."
         while IFS='=' read -r key value; do
@@ -206,13 +378,18 @@ install_manager() {
     log "--- Admin Credentials ---"
     prompt HICLAW_ADMIN_USER "Admin Username" "admin"
     if [ -z "${HICLAW_ADMIN_PASSWORD}" ]; then
-        prompt_optional HICLAW_ADMIN_PASSWORD "Admin Password (leave empty to auto-generate)" "true"
+        prompt_optional HICLAW_ADMIN_PASSWORD "Admin Password (leave empty to auto-generate, min 8 chars)" "true"
         if [ -z "${HICLAW_ADMIN_PASSWORD}" ]; then
             HICLAW_ADMIN_PASSWORD="admin$(openssl rand -hex 6)"
             log "  Auto-generated admin password"
         fi
     else
         log "  HICLAW_ADMIN_PASSWORD = (pre-set via env)"
+    fi
+
+    # Validate password length (MinIO requires at least 8 characters)
+    if [ ${#HICLAW_ADMIN_PASSWORD} -lt 8 ]; then
+        error "Admin password must be at least 8 characters (MinIO requirement). Current length: ${#HICLAW_ADMIN_PASSWORD}"
     fi
 
     log ""
@@ -505,7 +682,8 @@ install_worker() {
 # ============================================================
 
 case "${1:-}" in
-    manager)
+    manager|"")
+        # Default to manager installation if no argument or explicit "manager"
         install_manager
         ;;
     worker)
@@ -513,21 +691,21 @@ case "${1:-}" in
         install_worker "$@"
         ;;
     *)
-        echo "Usage: $0 {manager|worker [options]}"
+        echo "Usage: $0 [manager|worker [options]]"
         echo ""
         echo "Commands:"
-        echo "  manager              Interactive Manager installation"
+        echo "  manager              Interactive Manager installation (default)"
         echo "  worker               Worker installation (requires --name and connection params)"
         echo ""
         echo "All manager prompts can be pre-set via environment variables."
         echo "Minimal interactive install (only LLM key required):"
-        echo "  HICLAW_LLM_API_KEY=sk-xxx $0 manager"
+        echo "  HICLAW_LLM_API_KEY=sk-xxx $0"
         echo ""
         echo "Non-interactive install (all defaults, no prompts):"
-        echo "  HICLAW_NON_INTERACTIVE=1 HICLAW_LLM_API_KEY=sk-xxx $0 manager"
+        echo "  HICLAW_NON_INTERACTIVE=1 HICLAW_LLM_API_KEY=sk-xxx $0"
         echo ""
         echo "With external data directory:"
-        echo "  HICLAW_DATA_DIR=~/hiclaw-data HICLAW_LLM_API_KEY=sk-xxx $0 manager"
+        echo "  HICLAW_DATA_DIR=~/hiclaw-data HICLAW_LLM_API_KEY=sk-xxx $0"
         echo ""
         echo "Worker Options:"
         echo "  --name <name>        Worker name (required)"

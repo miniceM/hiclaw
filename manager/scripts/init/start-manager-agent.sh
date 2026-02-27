@@ -288,15 +288,31 @@ else
 fi
 
 # ============================================================
-# Push upgraded builtin Worker skills if upgrade happened
+# Notify workers of builtin updates if upgrade happened
+# Builtin files (AGENTS.md, skills) are already synced by upgrade-builtins.sh
 # ============================================================
 if [ -f ~/manager-workspace/.upgrade-pending-worker-notify ]; then
-    log "Pushing upgraded builtin worker skills to registered workers..."
-    for skill in coding-cli git-delegation github-operations file-sync; do
-        bash /opt/hiclaw/agent/skills/worker-management/scripts/push-worker-skills.sh \
-            --skill "${skill}" 2>/dev/null \
-            || log "WARNING: Failed to push skill ${skill}"
-    done
+    log "Notifying workers about builtin updates..."
+    REGISTRY_FILE="${HOME}/manager-workspace/workers-registry.json"
+    if [ -f "${REGISTRY_FILE}" ]; then
+        for _worker_name in $(jq -r '.workers | keys[]' "${REGISTRY_FILE}" 2>/dev/null); do
+            [ -z "${_worker_name}" ] && continue
+            _room_id=$(jq -r --arg w "${_worker_name}" '.workers[$w].room_id // empty' "${REGISTRY_FILE}" 2>/dev/null)
+            if [ -n "${_room_id}" ]; then
+                _worker_id="@${_worker_name}:${MATRIX_DOMAIN}"
+                _txn_id="upgrade-$(date +%s%N)"
+                _msg="@${_worker_name}:${MATRIX_DOMAIN} Manager upgraded builtin files (AGENTS.md, skills). Please run: hiclaw-sync"
+                curl -sf -X PUT \
+                    "http://127.0.0.1:6167/_matrix/client/v3/rooms/${_room_id}/send/m.room.message/${_txn_id}" \
+                    -H "Authorization: Bearer ${MANAGER_TOKEN}" \
+                    -H 'Content-Type: application/json' \
+                    -d "{\"msgtype\":\"m.text\",\"body\":\"${_msg}\",\"m.mentions\":{\"user_ids\":[\"${_worker_id}\"]}}" \
+                    > /dev/null 2>&1 \
+                    && log "  Notified ${_worker_name}" \
+                    || log "  WARNING: Failed to notify ${_worker_name}"
+            fi
+        done
+    fi
     rm -f ~/manager-workspace/.upgrade-pending-worker-notify
 fi
 
