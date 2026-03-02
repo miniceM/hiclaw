@@ -1000,26 +1000,6 @@ EOF
     echo -e "\033[33m    The Manager will handle everything automatically.                            \033[0m"
     echo -e "\033[33m                                                                                 \033[0m"
     echo -e "\033[33m  ─────────────────────────────────────────────────────────────────────────────  \033[0m"
-    echo -e "\033[33m  🌐 LAN Browser access (other devices on the same network):                    \033[0m"
-    echo -e "\033[33m                                                                                 \033[0m"
-    if [ -n "${lan_ip}" ]; then
-    echo -e "\033[33m    Open in browser: \033[1;36mhttp://${lan_ip}:${HICLAW_PORT_ELEMENT_WEB:-18088}/#/login\033[0m"
-    echo -e "\033[33m    (Element Web served directly — no custom domain needed)                     \033[0m"
-    echo -e "\033[33m    Login with:                                                                  \033[0m"
-    echo -e "\033[33m      Username: \033[1;32m${HICLAW_ADMIN_USER}\033[0m"
-    echo -e "\033[33m      Password: \033[1;32m${HICLAW_ADMIN_PASSWORD}\033[0m"
-    echo -e "\033[33m    Homeserver: \033[1;36mhttp://${lan_ip}:${HICLAW_PORT_GATEWAY}\033[0m"
-    else
-    echo -e "\033[33m    Open in browser: \033[1;36mhttp://<this-machine-LAN-IP>:${HICLAW_PORT_ELEMENT_WEB:-18088}/#/login\033[0m"
-    echo -e "\033[33m    (Element Web served directly — no custom domain needed)                     \033[0m"
-    echo -e "\033[33m    Login with:                                                                  \033[0m"
-    echo -e "\033[33m      Username: \033[1;32m${HICLAW_ADMIN_USER}\033[0m"
-    echo -e "\033[33m      Password: \033[1;32m${HICLAW_ADMIN_PASSWORD}\033[0m"
-    echo -e "\033[33m    Homeserver: \033[1;36mhttp://<this-machine-LAN-IP>:${HICLAW_PORT_GATEWAY}\033[0m"
-    echo -e "\033[33m    (Could not detect LAN IP — check with: ifconfig / ip addr)                  \033[0m"
-    fi
-    echo -e "\033[33m                                                                                 \033[0m"
-    echo -e "\033[33m  ─────────────────────────────────────────────────────────────────────────────  \033[0m"
     echo -e "\033[33m  📱 Mobile access (FluffyChat / Element Mobile):                               \033[0m"
     echo -e "\033[33m                                                                                 \033[0m"
     if [ -n "${lan_ip}" ]; then

@@ -1112,26 +1112,6 @@ function Install-Manager {
     Write-Host "`e[33m    The Manager will handle everything automatically.`e[0m"
     Write-Host "`e[33m                                                                                 `e[0m"
     Write-Host "`e[33m  ─────────────────────────────────────────────────────────────────────────────  `e[0m"
-    Write-Host "`e[33m  🌐 LAN Browser access (other devices on the same network):                    `e[0m"
-    Write-Host "`e[33m                                                                                 `e[0m"
-    if ($lanIP) {
-        Write-Host "`e[33m    Open in browser: `e[1;36mhttp://${lanIP}:$($config.PORT_ELEMENT_WEB)/#/login`e[0m"
-        Write-Host "`e[33m    (Element Web served directly - no custom domain needed)                     `e[0m"
-        Write-Host "`e[33m    Login with:                                                                  `e[0m"
-        Write-Host "`e[33m      Username: `e[1;32m$($config.ADMIN_USER)`e[0m"
-        Write-Host "`e[33m      Password: `e[1;32m$($config.ADMIN_PASSWORD)`e[0m"
-        Write-Host "`e[33m    Homeserver: `e[1;36mhttp://${lanIP}:$($config.PORT_GATEWAY)`e[0m"
-    } else {
-        Write-Host "`e[33m    Open in browser: `e[1;36mhttp://<this-machine-LAN-IP>:$($config.PORT_ELEMENT_WEB)/#/login`e[0m"
-        Write-Host "`e[33m    (Element Web served directly - no custom domain needed)                     `e[0m"
-        Write-Host "`e[33m    Login with:                                                                  `e[0m"
-        Write-Host "`e[33m      Username: `e[1;32m$($config.ADMIN_USER)`e[0m"
-        Write-Host "`e[33m      Password: `e[1;32m$($config.ADMIN_PASSWORD)`e[0m"
-        Write-Host "`e[33m    Homeserver: `e[1;36mhttp://<this-machine-LAN-IP>:$($config.PORT_GATEWAY)`e[0m"
-        Write-Host "`e[33m    (Could not detect LAN IP - check with: ipconfig)                            `e[0m"
-    }
-    Write-Host "`e[33m                                                                                 `e[0m"
-    Write-Host "`e[33m  ─────────────────────────────────────────────────────────────────────────────  `e[0m"
     Write-Host "`e[33m  📱 Mobile access (FluffyChat / Element Mobile):                               `e[0m"
     Write-Host "`e[33m                                                                                 `e[0m"
     if ($lanIP) {
