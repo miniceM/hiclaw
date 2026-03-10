@@ -23,8 +23,6 @@ The Manager is configured via environment variables set during installation. The
 | `HICLAW_MATRIX_CLIENT_DOMAIN` | No | `matrix-client-local.hiclaw.io` | Element Web domain |
 | `HICLAW_AI_GATEWAY_DOMAIN` | No | `aigw-local.hiclaw.io` | AI Gateway domain (for LLM and MCP) |
 | `HICLAW_FS_DOMAIN` | No | `fs-local.hiclaw.io` | File system domain |
-| `HICLAW_PORT_GATEWAY` | No | `18080` | Host port for Higress gateway |
-| `HICLAW_PORT_CONSOLE` | No | `18001` | Host port for Higress console |
 | `HICLAW_PORT_ELEMENT_WEB` | No | `18088` | Host port for Element Web direct access |
 | `HICLAW_GITHUB_TOKEN` | No | - | GitHub PAT for MCP Server |
 | `HICLAW_WORKER_IMAGE` | No | `hiclaw/worker-agent:latest` | Worker Docker image for direct creation |
@@ -56,10 +54,9 @@ To add a new skill:
 
 To add a new MCP Server (e.g., GitLab, Jira):
 
-1. Configure the MCP Server in Higress Console
-2. Add the MCP Server entry via Higress API: `PUT /v1/mcpServer`
-3. Authorize consumers: `PUT /v1/mcpServer/consumers`
-4. Create a skill for Workers that documents the available tools
+1. Configure MCP credentials via environment variables during Worker container creation
+2. The Worker's mcporter runtime will automatically connect to configured MCP servers
+3. Create a skill for Workers that documents the available tools
 
 ## Multi-Channel Communication
 
@@ -206,7 +203,6 @@ docker logs hiclaw-manager -f
 # Specific component logs (inside container)
 docker exec hiclaw-manager cat /var/log/hiclaw/manager-agent.log
 docker exec hiclaw-manager cat /var/log/hiclaw/tuwunel.log
-docker exec hiclaw-manager cat /var/log/hiclaw/higress-console.log
 
 # OpenClaw runtime log (agent events, tool calls, LLM interactions)
 docker exec hiclaw-manager bash -c 'cat /tmp/openclaw/openclaw-*.log' | jq .
@@ -229,12 +225,10 @@ make replay-log
 # Check individual services
 curl -s http://127.0.0.1:6167/_matrix/client/versions   # Matrix (internal port, from host via docker exec)
 curl -s http://127.0.0.1:9000/minio/health/live          # MinIO (internal port, from host via docker exec)
-curl -s http://127.0.0.1:18001/                           # Higress Console (host port)
 ```
 
 ### Consoles
 
-- **Higress Console**: http://localhost:18001 - Gateway management, routes, consumers
 - **MinIO Console**: http://localhost:9001 - File system browsing, agent configs (direct port, not via gateway)
 - **Element Web**: http://127.0.0.1:18088 - IM interface (direct port), or http://matrix-client-local.hiclaw.io:18080 via gateway
 
@@ -245,7 +239,6 @@ curl -s http://127.0.0.1:18001/                           # Higress Console (hos
 All persistent data is stored in the `hiclaw-data` Docker volume:
 - Tuwunel database (Matrix history)
 - MinIO storage (Agent configs, task data)
-- Higress configuration
 
 Additionally, the user's home directory can be shared with agents for file access:
 

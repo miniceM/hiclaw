@@ -28,11 +28,7 @@ No need to set defaults - these are always available in the container environmen
 
 ## Authentication
 
-Same as `higress-gateway-management` -- use the session cookie file at `${HIGRESS_COOKIE_FILE}`:
-
-```bash
-curl -b "${HIGRESS_COOKIE_FILE}" ...
-```
+Note: MCP Server configuration is now handled locally via mcporter. Workers receive MCP credentials via environment variables at container creation time.
 
 ## Understanding rawConfigurations
 

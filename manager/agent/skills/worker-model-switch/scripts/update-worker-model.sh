@@ -104,8 +104,7 @@ update_worker_model() {
         rm -f /tmp/model-test-resp-${worker}.json
         _log "ERROR: Model test failed (HTTP ${http_code}): ${resp_body}"
         _log "The model '${new_model}' is not reachable via the AI Gateway."
-        _log "Please check the Higress Console to confirm the AI route is configured for this model:"
-        _log "  http://<manager-host>:8001  →  AI Routes → verify provider and model mapping"
+        _log "Please check the AI Gateway configuration to confirm the route is configured for this model."
         return 1
     fi
     rm -f /tmp/model-test-resp-${worker}.json
