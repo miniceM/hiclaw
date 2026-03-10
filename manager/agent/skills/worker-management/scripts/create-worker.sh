@@ -124,13 +124,12 @@ if [ -z "${MANAGER_MATRIX_TOKEN}" ]; then
     log "Obtained Manager Matrix token via login"
 fi
 
-# Resolve LLM API key from environment
-if [ -z "${HICLAW_LLM_API_KEY}" ]; then
-    _fail "HICLAW_LLM_API_KEY not set"
-fi
-
 # ============================================================
 # Step 1: Register Matrix Account
+# ============================================================
+# Note: Worker will read HICLAW_LLM_API_KEY from environment at runtime.
+# The Manager container should have this env var set, and Worker containers
+# will inherit it via the docker run -e flag or docker-compose environment.
 # ============================================================
 log "Step 1: Registering Matrix account for ${WORKER_NAME}..."
 WORKER_USER_ID="@${WORKER_NAME}:${MATRIX_DOMAIN}"
@@ -254,7 +253,7 @@ log "  Room created: ${ROOM_ID}"
 # Step 3: Generate openclaw.json
 # ============================================================
 log "Step 3: Generating openclaw.json..."
-GEN_ARGS=("${WORKER_NAME}" "${WORKER_MATRIX_TOKEN}" "${HICLAW_LLM_API_KEY}")
+GEN_ARGS=("${WORKER_NAME}" "${WORKER_MATRIX_TOKEN}")
 if [ -n "${MODEL_ID}" ]; then
     GEN_ARGS+=("${MODEL_ID}")
 fi

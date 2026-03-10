@@ -2,23 +2,26 @@
 # generate-worker-config.sh - Generate Worker openclaw.json from template
 #
 # Usage:
-#   generate-worker-config.sh <WORKER_NAME> <MATRIX_TOKEN> <LLM_API_KEY> [MODEL_ID]
+#   generate-worker-config.sh <WORKER_NAME> <MATRIX_TOKEN> [MODEL_ID]
 #
 # Reads env vars: HICLAW_MATRIX_DOMAIN, HICLAW_LLM_PROVIDER, HICLAW_LLM_API_URL, HICLAW_ADMIN_USER, HICLAW_DEFAULT_MODEL
 # Output: ~/hiclaw-fs/agents/<WORKER_NAME>/openclaw.json
+#
+# Note: LLM API key should be injected via HICLAW_LLM_API_KEY env var at Worker runtime
 
 set -e
 source /opt/hiclaw/scripts/lib/base.sh
 
 WORKER_NAME="$1"
 WORKER_MATRIX_TOKEN="$2"
-WORKER_LLM_API_KEY="$3"
-MODEL_NAME="${4:-${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}}"
+MODEL_NAME="${3:-${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}}"
 # Strip provider prefix if caller passed "provider/<model>" by mistake
 MODEL_NAME="${MODEL_NAME#*/}"
 
-if [ -z "${WORKER_NAME}" ] || [ -z "${WORKER_MATRIX_TOKEN}" ] || [ -z "${WORKER_LLM_API_KEY}" ]; then
-    echo "Usage: generate-worker-config.sh <WORKER_NAME> <MATRIX_TOKEN> <LLM_API_KEY> [MODEL_ID]"
+if [ -z "${WORKER_NAME}" ] || [ -z "${WORKER_MATRIX_TOKEN}" ]; then
+    echo "Usage: generate-worker-config.sh <WORKER_NAME> <MATRIX_TOKEN> [MODEL_ID]"
+    echo ""
+    echo "Note: Worker will read HICLAW_LLM_API_KEY from environment at runtime"
     exit 1
 fi
 
@@ -73,10 +76,9 @@ GATEWAY_AUTH_TOKEN=$(openssl rand -hex 32)
 export WORKER_NAME
 export WORKER_GATEWAY_AUTH_TOKEN="${GATEWAY_AUTH_TOKEN}"
 export WORKER_MATRIX_TOKEN
-# LLM configuration
+# LLM configuration (API key will be read from HICLAW_LLM_API_KEY env var at runtime)
 export HICLAW_LLM_PROVIDER="${LLM_PROVIDER}"
 export HICLAW_LLM_API_URL="${LLM_API_URL}"
-export HICLAW_LLM_API_KEY="${WORKER_LLM_API_KEY}"
 # Matrix Server URL uses internal port 8080 for Docker network
 export HICLAW_MATRIX_SERVER="http://${MATRIX_DOMAIN%%:*}:${MATRIX_SERVER_PORT}"
 # Matrix Domain for user IDs keeps original port (e.g., :9080)
