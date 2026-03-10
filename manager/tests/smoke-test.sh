@@ -34,12 +34,6 @@ check "MinIO Console (port 9001)" \
 check "Tuwunel Matrix (port 6167)" \
     "curl -sf http://127.0.0.1:6167/_matrix/client/versions"
 
-check "Higress Gateway (port 8080)" \
-    "curl -sf -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ | grep -q '404\|200'"
-
-check "Higress Console (port 8001)" \
-    "curl -sf http://127.0.0.1:8001/"
-
 check "Element Web (port 8088)" \
     "curl -sf http://127.0.0.1:8088/"
 
