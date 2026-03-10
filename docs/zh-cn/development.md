@@ -59,9 +59,15 @@ make push MULTIARCH_PLATFORMS=linux/amd64,linux/arm64,linux/arm/v7
 
 所有基础镜像均来自公共镜像仓库：
 - **openclaw-base**: `hiclaw/openclaw-base:latest`（GitHub Packages）
-- **Tuwunel**: `girlbossceo/conduwuit:latest`（Docker Hub）
+- **Tuwunel**: `ghcr.io/girlbossceo/conduwuit:latest`（GitHub Container Registry）
 - **MinIO**: `quay.io/minio/minio:latest`（Quay.io）
 - **Element Web**: `vectorim/element-web:latest`（Docker Hub）
+
+**注意**：GHCR 镜像可能需要登录或配置镜像加速器。如遇拉取问题，可通过环境变量自定义镜像源：
+
+```bash
+make build-manager TUWUNEL_IMAGE=<alternative-image>
+```
 
 如遇网络问题，可配置 Docker 镜像加速器或使用代理。
 

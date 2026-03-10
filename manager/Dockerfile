@@ -13,7 +13,7 @@
 # ============================================================
 
 ARG OPENCLAW_BASE_IMAGE=hiclaw/openclaw-base:latest
-ARG TUWUNEL_IMAGE=girlbossceo/conduwuit:latest
+ARG TUWUNEL_IMAGE=ghcr.io/girlbossceo/conduwuit:latest
 ARG MINIO_IMAGE=quay.io/minio/minio:latest
 ARG MC_IMAGE=quay.io/minio/mc:latest
 ARG ELEMENT_WEB_IMAGE=vectorim/element-web:latest
