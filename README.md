@@ -35,7 +35,7 @@ All communication happens in Matrix Rooms. You see everything, and can intervene
 
 **Truly open IM**: Built-in Matrix server means no Slack/Feishu bot approval process. Open Element Web in your browser, or use any Matrix client (Element, FluffyChat) on mobile — iOS, Android, Web.
 
-**One command to start**: A single `curl | bash` sets everything up — Higress AI Gateway, Matrix server, file storage, web client, and the Manager Agent itself.
+**One command to start**: A single `curl | bash` sets everything up — Matrix server, file storage, web client, and the Manager Agent itself.
 
 **Skills ecosystem**: Workers can pull from [skills.sh](https://skills.sh) (80,000+ community skills) on demand. Safe to use because Workers can't access real credentials anyway.
 
@@ -126,12 +126,22 @@ The Manager also runs periodic heartbeats — if a Worker gets stuck, it alerts 
 ### Security model
 
 ```
-Worker (consumer token only)
-    → Higress AI Gateway (holds real API keys, GitHub PAT)
-        → LLM API / GitHub API / MCP Servers
+Manager Container
+    (holds LLM API Key, GitHub Token, etc.)
+         ↓
+    Inject via Docker --env
+         ↓
+Worker Container
+    (reads credentials at runtime)
+         ↓
+    Direct access to LLM API / GitHub API / MCP Server
 ```
 
-Workers only see their consumer token. The gateway handles all real credentials. Manager knows what Workers are doing, but never touches the actual keys either.
+Credential Management:
+- LLM API Key and MCP credentials stored in Manager container environment variables
+- Worker creation injects necessary environment variables via `docker run --env`
+- Worker's openclaw.json uses `$HICLAW_LLM_API_KEY` syntax, telling OpenClaw to read from environment at runtime
+- No sensitive credentials stored in MinIO or configuration files
 
 ### Human in the loop
 
@@ -151,7 +161,7 @@ No black boxes. No hidden agent-to-agent calls.
 |---|---|---|
 | Deployment | Single process | Distributed containers |
 | Agent creation | Manual config + restart | Conversational |
-| Credentials | Each agent holds real keys | Workers only hold consumer tokens |
+| Credential management | Each agent holds real keys | Workers get credentials via environment variables, not stored |
 | Human visibility | Optional | Built-in (Matrix Rooms) |
 | Mobile access | Depends on channel setup | Any Matrix client, zero config |
 | Monitoring | None | Manager heartbeat, visible in Room |
@@ -161,7 +171,7 @@ No black boxes. No hidden agent-to-agent calls.
 ```
 ┌─────────────────────────────────────────────┐
 │         hiclaw-manager-agent                │
-│  Higress │ Tuwunel │ MinIO │ Element Web    │
+│  Tuwunel │ MinIO │ Element Web              │
 │  Manager Agent (OpenClaw)                   │
 └──────────────────┬──────────────────────────┘
                    │ Matrix + HTTP Files
@@ -173,7 +183,6 @@ No black boxes. No hidden agent-to-agent calls.
 
 | Component | Role |
 |-----------|------|
-| Higress AI Gateway | LLM proxy, MCP Server hosting, credential management |
 | Tuwunel (Matrix) | IM server for all Agent + Human communication |
 | Element Web | Browser client, zero setup |
 | MinIO | Centralized file storage, Workers are stateless |
@@ -216,10 +225,10 @@ Goal: Make Agent Teams as observable and controllable as human teams — no blac
 
 ### Universal MCP Service Support
 
-Currently, Workers access GitHub via Higress MCP Gateway + mcporter, using only a Higress-issued token — real GitHub PATs never leave the gateway. This secure pattern works for any MCP server:
+Currently, Workers access GitHub via local mcporter, with GitHub Token injected via environment variables — real GitHub PATs are never exposed to Workers. This secure pattern works for any MCP server:
 
 - **Pre-built MCP connectors**: GitHub, Slack, Notion, Linear, and more
-- **Custom MCP integration**: Bring your own MCP server, let Higress handle auth
+- **Custom MCP integration**: Bring your own MCP server, inject credentials via environment variables
 - **Per-Worker access control**: Manager grants/revokes MCP access per Worker
 
 Goal: Any tool that speaks MCP can be safely exposed to Workers without credential leakage.

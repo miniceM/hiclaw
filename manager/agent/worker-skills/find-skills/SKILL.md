@@ -82,10 +82,10 @@ vercel-labs/agent-skills@vercel-react-best-practices
 >
 > ```bash
 > # Wrong ❌ - short name only
-> skills add higress-wasm-go-plugin -g -y
+> skills add example-skill -g -y
 >
 > # Correct ✓ - full owner/repo@skill format from search results
-> skills add alibaba/higress@higress-wasm-go-plugin -g -y
+> skills add vercel-labs/agent-skills@example-skill -g -y
 > ```
 
 ### Step 3: Present Options to the User
