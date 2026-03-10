@@ -42,7 +42,7 @@ All communication happens in Matrix Rooms. You see everything, and can intervene
 ## Quick Start
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 That's it. The script asks for your LLM API key, then sets everything up. When it's done:
@@ -57,7 +57,7 @@ That's it. The script asks for your LLM API key, then sets everything up. When i
 **Windows (PowerShell 7+):**
 
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
+Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.ps1'))
 ```
 
 **Prerequisites**: Docker Desktop (Windows/macOS) or Docker Engine (Linux). That's all.
@@ -72,13 +72,13 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object
 Run the same install script in-place to upgrade. Your data and config are preserved. Upgrades to the latest version by default:
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 To upgrade to a specific version:
 
 ```bash
-HICLAW_VERSION=0.2.0 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+HICLAW_VERSION=0.2.0 bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 ### After install

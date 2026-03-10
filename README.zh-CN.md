@@ -41,7 +41,7 @@ HiClaw 是基于 [OpenClaw](https://github.com/nicepkg/openclaw) 的开源 Agent
 ## 快速开始
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 就这一条。脚本会询问你的 LLM API Key，然后自动完成所有配置。安装完成后：
@@ -56,7 +56,7 @@ bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
 **Windows（PowerShell 7+）：**
 
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
+Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.ps1'))
 ```
 
 **前置条件**：Docker Desktop（Windows/macOS）或 Docker Engine（Linux）。仅此而已。
@@ -71,13 +71,13 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object
 重新执行安装脚本即可原地升级，数据和配置会保留。默认升级到最新版本：
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 指定版本升级：
 
 ```bash
-HICLAW_VERSION=0.2.0 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+HICLAW_VERSION=0.2.0 bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 ### 安装完成后
