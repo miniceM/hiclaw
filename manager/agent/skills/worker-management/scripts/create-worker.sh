@@ -2,8 +2,7 @@
 # create-worker.sh - One-shot Worker creation script
 #
 # Automates the full Worker lifecycle: Matrix registration, room creation,
-# Higress consumer setup, AI route & MCP authorization, config generation,
-# MinIO sync, skills push, and container startup.
+# config generation, MinIO sync, skills push, and container startup.
 #
 # Usage:
 #   create-worker.sh --name <NAME> [--model <MODEL_ID>] [--mcp-servers s1,s2] [--skills s1,s2] [--find-skills] [--skills-api-url <URL>] [--remote]
@@ -11,8 +10,7 @@
 # Prerequisites:
 #   - SOUL.md must already exist at ~/hiclaw-fs/agents/<NAME>/SOUL.md
 #   - Environment: HICLAW_REGISTRATION_TOKEN, HICLAW_MATRIX_DOMAIN,
-#     HICLAW_AI_GATEWAY_DOMAIN, HICLAW_ADMIN_USER, HIGRESS_COOKIE_FILE,
-#     MANAGER_MATRIX_TOKEN
+#     HICLAW_ADMIN_USER, HICLAW_LLM_API_KEY, MANAGER_MATRIX_TOKEN
 
 set -e
 source /opt/hiclaw/scripts/lib/base.sh
@@ -126,19 +124,12 @@ if [ -z "${MANAGER_MATRIX_TOKEN}" ]; then
     log "Obtained Manager Matrix token via login"
 fi
 
-if [ -z "${HIGRESS_COOKIE_FILE}" ] || [ ! -s "${HIGRESS_COOKIE_FILE}" ]; then
-    HIGRESS_COOKIE_FILE="/tmp/higress-session-cookie-worker-create"
-    ADMIN_PASSWORD="${HICLAW_ADMIN_PASSWORD:-admin}"
-    curl -sf -o /dev/null -X POST http://127.0.0.1:8001/session/login \
-        -H 'Content-Type: application/json' \
-        -c "${HIGRESS_COOKIE_FILE}" \
-        -d '{"username":"'"${ADMIN_USER}"'","password":"'"${ADMIN_PASSWORD}"'"}' 2>/dev/null \
-        || _fail "Failed to login to Higress Console"
-    log "Obtained Higress session cookie via login"
-fi
-
 # ============================================================
 # Step 1: Register Matrix Account
+# ============================================================
+# Note: Worker will read HICLAW_LLM_API_KEY from environment at runtime.
+# The Manager container should have this env var set, and Worker containers
+# will inherit it via the docker run -e flag or docker-compose environment.
 # ============================================================
 log "Step 1: Registering Matrix account for ${WORKER_NAME}..."
 WORKER_USER_ID="@${WORKER_NAME}:${MATRIX_DOMAIN}"
@@ -187,14 +178,10 @@ else
     fi
 fi
 
-# Pre-generate gateway key if not loaded from persisted creds (for new workers)
-[ -z "${WORKER_GATEWAY_KEY}" ] && WORKER_GATEWAY_KEY=$(generateKey 32)
-
 # Persist credentials for future re-creation
 cat > "${WORKER_CREDS_FILE}" <<CREDS
 WORKER_PASSWORD="${WORKER_PASSWORD}"
 WORKER_MINIO_PASSWORD="${WORKER_MINIO_PASSWORD}"
-WORKER_GATEWAY_KEY="${WORKER_GATEWAY_KEY}"
 CREDS
 chmod 600 "${WORKER_CREDS_FILE}"
 
@@ -263,131 +250,51 @@ fi
 log "  Room created: ${ROOM_ID}"
 
 # ============================================================
-# Step 3: Create Higress Consumer (key-auth)
+# Step 3: Generate openclaw.json
 # ============================================================
-log "Step 3: Creating Higress consumer..."
-WORKER_KEY="${WORKER_GATEWAY_KEY}"
-CONSUMER_RESP=$(curl -sf -X POST http://127.0.0.1:8001/v1/consumers \
-    -b "${HIGRESS_COOKIE_FILE}" \
-    -H 'Content-Type: application/json' \
-    -d '{
-        "name": "'"${CONSUMER_NAME}"'",
-        "credentials": [{
-            "type": "key-auth",
-            "source": "BEARER",
-            "values": ["'"${WORKER_KEY}"'"]
-        }]
-    }' 2>/dev/null) || _fail "Failed to create Higress consumer"
-log "  Consumer created: ${CONSUMER_NAME}"
-
-# ============================================================
-# Step 4: Authorize all AI Routes
-# ============================================================
-log "Step 4: Authorizing AI routes..."
-AI_ROUTES=$(curl -sf http://127.0.0.1:8001/v1/ai/routes \
-    -b "${HIGRESS_COOKIE_FILE}" 2>/dev/null) || _fail "Failed to list AI routes"
-
-ROUTE_NAMES=$(echo "${AI_ROUTES}" | jq -r '.data[]?.name // empty' 2>/dev/null || true)
-for route_name in ${ROUTE_NAMES}; do
-    [ -z "${route_name}" ] && continue
-    ROUTE_RESP=$(curl -sf "http://127.0.0.1:8001/v1/ai/routes/${route_name}" \
-        -b "${HIGRESS_COOKIE_FILE}" 2>/dev/null) || continue
-    ROUTE=$(echo "${ROUTE_RESP}" | jq '.data // .' 2>/dev/null)
-
-    ALREADY=$(echo "${ROUTE}" | jq -r '.authConfig.allowedConsumers[]? // empty' 2>/dev/null | grep -c "^${CONSUMER_NAME}$" || true)
-    if [ "${ALREADY}" -gt 0 ]; then
-        log "  Route ${route_name}: already authorized"
-        continue
-    fi
-
-    UPDATED=$(echo "${ROUTE}" | jq --arg c "${CONSUMER_NAME}" '.authConfig.allowedConsumers += [$c]')
-    curl -sf -X PUT "http://127.0.0.1:8001/v1/ai/routes/${route_name}" \
-        -b "${HIGRESS_COOKIE_FILE}" \
-        -H 'Content-Type: application/json' \
-        -d "${UPDATED}" > /dev/null 2>&1 || log "  WARNING: Failed to update route ${route_name}"
-    log "  Route ${route_name}: authorized"
-done
-
-# ============================================================
-# Step 5: Authorize MCP Servers
-# ============================================================
-log "Step 5: Authorizing MCP servers..."
-ALL_MCP_RAW=$(curl -sf http://127.0.0.1:8001/v1/mcpServer \
-    -b "${HIGRESS_COOKIE_FILE}" 2>/dev/null) || true
-ALL_MCP=$(echo "${ALL_MCP_RAW}" | jq '.data // .' 2>/dev/null || echo "${ALL_MCP_RAW}")
-
-if [ -n "${MCP_SERVERS}" ]; then
-    TARGET_MCP_LIST="${MCP_SERVERS}"
-else
-    TARGET_MCP_LIST=$(echo "${ALL_MCP}" | jq -r '.[].name // empty' 2>/dev/null | tr '\n' ',' || true)
-    TARGET_MCP_LIST="${TARGET_MCP_LIST%,}"
-fi
-
-if [ -n "${TARGET_MCP_LIST}" ]; then
-    IFS=',' read -ra MCP_ARR <<< "${TARGET_MCP_LIST}"
-    for mcp_name in "${MCP_ARR[@]}"; do
-        mcp_name=$(echo "${mcp_name}" | tr -d ' ')
-        [ -z "${mcp_name}" ] && continue
-
-        EXISTING_CONSUMERS=$(echo "${ALL_MCP}" | jq -r --arg n "${mcp_name}" \
-            '.[] | select(.name == $n) | .consumerAuthInfo.allowedConsumers // [] | .[]' 2>/dev/null || true)
-        CONSUMER_LIST="[\"manager\""
-        for ec in ${EXISTING_CONSUMERS}; do
-            [ "${ec}" = "manager" ] && continue
-            [ "${ec}" = "${CONSUMER_NAME}" ] && continue
-            CONSUMER_LIST="${CONSUMER_LIST},\"${ec}\""
-        done
-        CONSUMER_LIST="${CONSUMER_LIST},\"${CONSUMER_NAME}\"]"
-
-        curl -sf -X PUT http://127.0.0.1:8001/v1/mcpServer/consumers \
-            -b "${HIGRESS_COOKIE_FILE}" \
-            -H 'Content-Type: application/json' \
-            -d '{"mcpServerName":"'"${mcp_name}"'","consumers":'"${CONSUMER_LIST}"'}' > /dev/null 2>&1 \
-            || log "  WARNING: Failed to authorize MCP server ${mcp_name}"
-        log "  MCP ${mcp_name}: authorized"
-    done
-else
-    log "  No MCP servers found, skipping"
-fi
-
-# ============================================================
-# Step 6: Generate openclaw.json
-# ============================================================
-log "Step 6: Generating openclaw.json..."
-GEN_ARGS=("${WORKER_NAME}" "${WORKER_MATRIX_TOKEN}" "${WORKER_KEY}")
+log "Step 3: Generating openclaw.json..."
+GEN_ARGS=("${WORKER_NAME}" "${WORKER_MATRIX_TOKEN}")
 if [ -n "${MODEL_ID}" ]; then
     GEN_ARGS+=("${MODEL_ID}")
 fi
 bash /opt/hiclaw/agent/skills/worker-management/scripts/generate-worker-config.sh "${GEN_ARGS[@]}"
 
-# Generate mcporter-servers.json if MCP servers are authorized
-if [ -n "${TARGET_MCP_LIST}" ]; then
-    log "  Generating mcporter-servers.json..."
-    # MCP servers are hosted on the AI Gateway domain
-    AIGW_DOMAIN="${HICLAW_AI_GATEWAY_DOMAIN:-aigw-local.hiclaw.io}"
-    MCPORTER_JSON='{"mcpServers":{'
+# Generate mcporter-servers.json for local MCP servers
+if [ -n "${MCP_SERVERS}" ]; then
+    log "  Generating mcporter-servers.json (local mcporter)..."
+    MCPORTER_JSON='{"servers":{'
     FIRST=true
-    IFS=',' read -ra MCP_ARR2 <<< "${TARGET_MCP_LIST}"
-    for mcp_name in "${MCP_ARR2[@]}"; do
+    IFS=',' read -ra MCP_ARR <<< "${MCP_SERVERS}"
+    for mcp_name in "${MCP_ARR[@]}"; do
         mcp_name=$(echo "${mcp_name}" | tr -d ' ')
         [ -z "${mcp_name}" ] && continue
         if [ "${FIRST}" = true ]; then FIRST=false; else MCPORTER_JSON="${MCPORTER_JSON},"; fi
-        MCPORTER_JSON="${MCPORTER_JSON}\"${mcp_name}\":{\"url\":\"http://${AIGW_DOMAIN}:8080/mcp-servers/${mcp_name}/mcp\",\"transport\":\"http\",\"headers\":{\"Authorization\":\"Bearer ${WORKER_KEY}\"}}"
+
+        # Generate mcporter config for each MCP server (local execution)
+        case "${mcp_name}" in
+            github)
+                if [ -n "${HICLAW_GITHUB_TOKEN}" ]; then
+                    MCPORTER_JSON="${MCPORTER_JSON}\"${mcp_name}\":{\"command\":\"npx\",\"args\":[\"-y\",\"@modelcontextprotocol/server-github\"],\"env\":{\"GITHUB_PERSONAL_ACCESS_TOKEN\":\"${HICLAW_GITHUB_TOKEN}\"}}"
+                fi
+                ;;
+            filesystem)
+                MCPORTER_JSON="${MCPORTER_JSON}\"${mcp_name}\":{\"command\":\"npx\",\"args\":[\"-y\",\"@modelcontextprotocol/server-filesystem\"],\"env\":{}}"
+                ;;
+            *)
+                # Generic MCP server - assume npx package
+                MCPORTER_JSON="${MCPORTER_JSON}\"${mcp_name}\":{\"command\":\"npx\",\"args\":[\"-y\",\"@modelcontextprotocol/server-${mcp_name}\"],\"env\":{}}"
+                ;;
+        esac
     done
     MCPORTER_JSON="${MCPORTER_JSON}}}"
     echo "${MCPORTER_JSON}" | jq . > "/root/hiclaw-fs/agents/${WORKER_NAME}/mcporter-servers.json"
+    log "  Generated mcporter-servers.json with ${MCP_SERVERS}"
 fi
 
-# Step 6.5 removed: Workers do NOT get other workers in their groupAllowFrom by default.
-# By default, a Worker only accepts @mentions from Manager and the human admin.
-# This prevents infinite mutual-mention loops between Workers.
-# Inter-worker direct @mentions must be explicitly enabled per-project when needed.
-REGISTRY_FILE_EARLY="${HOME}/workers-registry.json"
-
 # ============================================================
-# Step 7: Update Manager groupAllowFrom
+# Step 4: Update Manager groupAllowFrom
 # ============================================================
-log "Step 7: Updating Manager groupAllowFrom..."
+log "Step 4: Updating Manager groupAllowFrom..."
 MANAGER_CONFIG="${HOME}/openclaw.json"
 WORKER_MATRIX_ID="@${WORKER_NAME}:${MATRIX_DOMAIN}"
 if [ -f "${MANAGER_CONFIG}" ]; then
@@ -408,7 +315,7 @@ fi
 # ============================================================
 # Step 8: Sync to MinIO
 # ============================================================
-log "Step 8: Syncing to MinIO..."
+log "Step 5: Syncing to MinIO..."
 mc mirror "/root/hiclaw-fs/agents/${WORKER_NAME}/" "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/" --overwrite 2>&1 | tail -5
 mc stat "hiclaw/hiclaw-storage/agents/${WORKER_NAME}/SOUL.md" > /dev/null 2>&1 \
     || _fail "SOUL.md not found in MinIO after sync"

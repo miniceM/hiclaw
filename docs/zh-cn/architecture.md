@@ -7,8 +7,6 @@ HiClaw 是一个 Agent 团队系统，让多个 AI Agent 通过即时通讯（Ma
 ```mermaid
 graph TB
     subgraph Manager 容器
-        HG[Higress AI 网关<br/>:8080 内部端口]
-        HC[Higress 控制台<br/>:8001 内部端口]
         TW[Tuwunel Matrix 服务器<br/>:6167 内部端口]
         EW[Element Web / Nginx<br/>:8088 内部端口]
         MO[MinIO<br/>:9000 / :9001 内部端口]
@@ -28,45 +26,26 @@ graph TB
         WMP2[mcporter]
     end
 
-    Human[人工管理员<br/>浏览器] -->|Element Web| HG
+    Human[人工管理员<br/>浏览器] -->|Element Web| EW
     Human -->|IM| TW
-    
-    HG -->|Matrix| TW
-    HG -->|文件| MO
-    HG -->|LLM API| LLM[LLM 提供商]
-    HG -->|MCP| GitHub[GitHub API]
-    
+
     MA -->|Matrix| TW
-    MA -->|Higress API| HC
+    MA -->|LLM API| LLM[LLM 提供商]
+    MA -->|GitHub MCP| GitHub[GitHub API]
     MC <-->|同步| MO
 
-    WA -->|Matrix via 网关| HG
+    WA -->|Matrix| TW
+    WA -->|LLM API| LLM
     WMC <-->|文件同步| MO
-    WMP -->|MCP 工具| HG
-    
-    WB -->|Matrix via 网关| HG
+    WMP -->|MCP 工具| GitHub
+
+    WB -->|Matrix| TW
+    WB -->|LLM API| LLM
     WMC2 <-->|文件同步| MO
-    WMP2 -->|MCP 工具| HG
+    WMP2 -->|MCP 工具| GitHub
 ```
 
 ## 组件详解
-
-### AI 网关（Higress）
-
-Higress 作为所有外部访问的统一入口：
-
-| 端口 | 服务 | 用途 |
-|------|------|------|
-| 8080 | 网关 | 所有基于域名路由的反向代理（宿主机默认暴露为 18080） |
-| 8001 | 控制台 | 管理 API（Session Cookie 认证，宿主机默认暴露为 18001） |
-
-**已配置的路由：**
-- `matrix-local.hiclaw.io` -> Tuwunel（端口 6167）- Matrix 服务器
-- `matrix-client-local.hiclaw.io` -> Element Web（端口 8088）- IM Web 客户端
-- `fs-local.hiclaw.io` -> MinIO（端口 9000）- HTTP 文件系统（需认证）
-- `aigw-local.hiclaw.io` -> AI 网关 - LLM 代理 + MCP 服务器（需认证）
-
-> 所有基于域名的路由都通过网关的 8080 端口（宿主机：18080）。Element Web 也可通过宿主机 18088 端口直接访问（映射到容器内 8088 端口）。
 
 ### Matrix 服务器（Tuwunel）
 
@@ -87,7 +66,7 @@ MinIO 提供可通过 HTTP 访问的集中式文件存储：
 
 Manager Agent 负责协调整个团队：
 - 通过 Matrix 私信**或其他已配置的渠道**（Discord、飞书、Telegram 等）接收人工管理员的任务
-- 创建 Worker（Matrix 账号 + Higress Consumer + 配置文件）
+- 创建 Worker（Matrix 账号 + 配置文件 + 环境变量）
 - 分配和跟踪任务
 - 执行心跳检查（由 OpenClaw 内置心跳机制触发）
 - 管理凭据和访问控制
@@ -95,13 +74,15 @@ Manager Agent 负责协调整个团队：
 - 监控 Matrix 房间会话过期，按需发送保活消息
 - 将每日通知路由到管理员的**主渠道**（Matrix 私信作为备用）
 - 支持**跨渠道升级**：将紧急问题发送到管理员的主渠道，并将回复路由回原始 Matrix 房间
+- 管理 LLM API 密钥和 MCP Server 凭据，通过环境变量安全注入到 Worker 容器
 
 ### Worker Agent（OpenClaw）
 
 Worker 是轻量级、无状态的容器：
 - 启动时从 MinIO 拉取所有配置
 - 通过 Matrix 房间通信（每个房间包含人工管理员 + Manager + Worker）
-- 使用 mcporter CLI 调用 MCP Server 工具（GitHub 等）
+- 使用 mcporter CLI 本地调用 MCP Server 工具（GitHub 等）
+- LLM API 密钥和 MCP 凭据通过环境变量从 Manager 注入，不存储在配置文件中
 - 可随时销毁和重建，不会丢失状态
 - Manager 可通过宿主机容器运行时 socket（Docker/Podman）直接创建 Worker，或提供 `docker run` 命令用于手动/远程部署
 
@@ -109,19 +90,28 @@ Worker 是轻量级、无状态的容器：
 
 ```
 ┌──────────────────────────────────────┐
-│            Higress 网关              │
-│   Consumer key-auth（BEARER token）  │
+│         Manager 容器                 │
+│   环境变量注入（Docker --env）       │
 │                                      │
-│  manager: 完全访问权限               │
-│  worker-alice: AI + FS + MCP(github) │
-│  worker-bob:   AI + FS              │
+│  HICLAW_LLM_API_KEY（LLM 密钥）      │
+│  HICLAW_GITHUB_TOKEN（MCP 凭据）     │
+└──────────────────────────────────────┘
+           │
+           ▼
+┌──────────────────────────────────────┐
+│         Worker 容器                  │
+│   OpenClaw 读取环境变量              │
+│                                      │
+│  openclaw.json: "$HICLAW_LLM_API_KEY"│
+│  mcporter-servers.json: env 注入     │
 └──────────────────────────────────────┘
 ```
 
-- 每个 Worker 拥有唯一的 Consumer 和 key-auth BEARER token
-- Manager 控制每个 Worker 可访问的路由和 MCP Server
-- 外部 API 凭据（GitHub PAT 等）集中存储在 MCP Server 配置中
-- Worker 永远无法直接看到外部 API 凭据
+- LLM API 密钥和 MCP Server 凭据（如 GitHub Token）存储在 Manager 容器的环境变量中
+- Worker 创建时，Manager 通过 Docker `--env` 标志将凭据注入到 Worker 容器
+- Worker 的 `openclaw.json` 使用 `$HICLAW_LLM_API_KEY` 语法（单美元符号），指示 OpenClaw 在运行时从环境变量读取
+- MCP Server 凭据通过 `mcporter-servers.json` 的 `env` 字段传递给本地 MCP 进程
+- 所有敏感凭据都不会存储在 MinIO 或配置文件中
 
 ## 通信模型
 

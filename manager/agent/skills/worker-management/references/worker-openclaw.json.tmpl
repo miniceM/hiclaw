@@ -36,9 +36,9 @@
   "models": {
     "mode": "merge",
     "providers": {
-      "hiclaw-gateway": {
-        "baseUrl": "${HICLAW_AI_GATEWAY}/v1",
-        "apiKey": "${WORKER_GATEWAY_KEY}",
+      "${HICLAW_LLM_PROVIDER}": {
+        "baseUrl": "${HICLAW_LLM_API_URL}",
+        "apiKey": "$HICLAW_LLM_API_KEY",
         "api": "openai-completions",
         "models": [
           {
@@ -59,7 +59,7 @@
       "timeoutSeconds": 1800,
       "workspace": "~",
       "model": {
-        "primary": "hiclaw-gateway/${HICLAW_DEFAULT_MODEL}"
+        "primary": "${HICLAW_LLM_PROVIDER}/${HICLAW_DEFAULT_MODEL}"
       },
       "maxConcurrent": 4,
       "subagents": {

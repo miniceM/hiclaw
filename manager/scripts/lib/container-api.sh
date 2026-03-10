@@ -107,10 +107,9 @@ container_create_worker() {
     local extra_hosts=""
     local matrix_host="${HICLAW_MATRIX_DOMAIN%%:*}"
     local matrix_client_host="${HICLAW_MATRIX_CLIENT_DOMAIN:-matrix-client-local.hiclaw.io}"
-    local ai_gw_host="${HICLAW_AI_GATEWAY_DOMAIN:-aigw-local.hiclaw.io}"
     local fs_host="${HICLAW_FS_DOMAIN:-fs-local.hiclaw.io}"
 
-    for h in "${matrix_host}" "${matrix_client_host}" "${ai_gw_host}" "${fs_host}"; do
+    for h in "${matrix_host}" "${matrix_client_host}" "${fs_host}"; do
         if [[ "${h}" == *-local.hiclaw.io ]]; then
             extra_hosts="${extra_hosts}\"${h}:${manager_ip}\","
         fi
@@ -141,7 +140,24 @@ container_create_worker() {
     local worker_home="/root/hiclaw-fs/agents/${worker_name}"
 
     # Build base environment variables
-    local base_env='["HOME='"${worker_home}"'","HICLAW_WORKER_NAME='"${worker_name}"'","HICLAW_FS_ENDPOINT='"${fs_endpoint}"'","HICLAW_FS_ACCESS_KEY='"${fs_access_key}"'","HICLAW_FS_SECRET_KEY='"${fs_secret_key}"'"]'
+    # Include LLM provider configuration so Worker can access LLM API directly
+    local base_env='["HOME='"${worker_home}"'","HICLAW_WORKER_NAME='"${worker_name}"'","HICLAW_FS_ENDPOINT='"${fs_endpoint}"'","HICLAW_FS_ACCESS_KEY='"${fs_access_key}"'","HICLAW_FS_SECRET_KEY='"${fs_secret_key}"'"'
+
+    # Add LLM provider environment variables if available
+    if [ -n "${HICLAW_LLM_PROVIDER}" ]; then
+        base_env=$(echo "${base_env}" | jq --arg p "${HICLAW_LLM_PROVIDER}" '. += ["HICLAW_LLM_PROVIDER=\($p)"]')
+    fi
+    if [ -n "${HICLAW_LLM_API_URL}" ]; then
+        base_env=$(echo "${base_env}" | jq --arg u "${HICLAW_LLM_API_URL}" '. += ["HICLAW_LLM_API_URL=\($u)"]')
+    fi
+    if [ -n "${HICLAW_LLM_API_KEY}" ]; then
+        base_env=$(echo "${base_env}" | jq --arg k "${HICLAW_LLM_API_KEY}" '. += ["HICLAW_LLM_API_KEY=\($k)"]')
+    fi
+    if [ -n "${HICLAW_DEFAULT_MODEL}" ]; then
+        base_env=$(echo "${base_env}" | jq --arg m "${HICLAW_DEFAULT_MODEL}" '. += ["HICLAW_DEFAULT_MODEL=\($m)"]')
+    fi
+
+    base_env=$(echo "${base_env}" | jq '. + [""] | del(.[ -1 ])')  # Remove trailing empty string
 
     # Merge with extra environment variables if provided
     local all_env

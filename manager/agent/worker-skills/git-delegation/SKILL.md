@@ -107,8 +107,8 @@ Write out the git commands you want executed:
 @manager:DOMAIN task-20260225 git-request:
 workspace: ~/hiclaw-fs/shared/tasks/task-20260225/workspace
 operations:
-  - git clone https://github.com/higress-group/hiclaw.git
-  - cd hiclaw && git checkout -b feature-xyz
+  - git clone https://github.com/YOUR_ORG/YOUR_REPO.git
+  - cd YOUR_REPO && git checkout -b feature-xyz
 ---CONTEXT---
 Starting work on feature XYZ
 ---END---
@@ -120,7 +120,7 @@ Starting work on feature XYZ
 ```
 @alice:DOMAIN task-20260225 git-result:
 Git operations completed successfully.
-Cloned to: ~/hiclaw-fs/shared/tasks/task-20260225/workspace/hiclaw
+Cloned to: ~/hiclaw-fs/shared/tasks/task-20260225/workspace/YOUR_REPO
 Created branch: feature-xyz
 Run `bash /opt/hiclaw/agent/skills/file-sync/scripts/hiclaw-sync.sh` to sync.
 ```
@@ -141,7 +141,7 @@ After receiving `git-result:`:
 bash /opt/hiclaw/agent/skills/file-sync/scripts/hiclaw-sync.sh
 
 # Now you can work locally
-cd ~/hiclaw-fs/shared/tasks/task-20260225/workspace/hiclaw
+cd ~/hiclaw-fs/shared/tasks/task-20260225/workspace/YOUR_REPO
 
 # Read files, modify files, etc.
 cat src/main.py
@@ -158,7 +158,7 @@ After making local changes:
 
 ```
 @manager:DOMAIN task-20260225 git-request:
-workspace: ~/hiclaw-fs/shared/tasks/task-20260225/workspace/hiclaw
+workspace: ~/hiclaw-fs/shared/tasks/task-20260225/workspace/YOUR_REPO
 operations:
   - git add .
   - git commit -m "feat: implement feature XYZ"
@@ -197,7 +197,7 @@ git pull
 
 ```
 @manager:DOMAIN task-20260225 git-request:
-workspace: ~/hiclaw-fs/shared/tasks/task-20260225/workspace/hiclaw
+workspace: ~/hiclaw-fs/shared/tasks/task-20260225/workspace/YOUR_REPO
 operations:
   - git rebase -i HEAD~3
 ---CONTEXT---
@@ -209,7 +209,7 @@ Squashing the last 3 commits into one
 
 ```
 @manager:DOMAIN task-20260225 git-request:
-workspace: ~/hiclaw-fs/shared/tasks/task-20260225/workspace/hiclaw
+workspace: ~/hiclaw-fs/shared/tasks/task-20260225/workspace/YOUR_REPO
 operations:
   - git cherry-pick abc123def
 ---CONTEXT---
@@ -221,7 +221,7 @@ Cherry-picking fix from main branch
 
 ```
 @manager:DOMAIN task-20260225 git-request:
-workspace: ~/hiclaw-fs/shared/tasks/task-20260225/workspace/hiclaw
+workspace: ~/hiclaw-fs/shared/tasks/task-20260225/workspace/YOUR_REPO
 operations:
   - git merge feature-xyz --no-ff -m "Merge feature XYZ"
 ---CONTEXT---

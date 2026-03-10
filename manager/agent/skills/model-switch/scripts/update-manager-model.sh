@@ -85,8 +85,7 @@ if [ "${HTTP_CODE}" != "200" ]; then
     echo "ERROR: Model test failed (HTTP ${HTTP_CODE}): ${RESP_BODY}"
     echo ""
     echo "The model '${MODEL_NAME}' is not reachable via the AI Gateway."
-    echo "Please check the Higress Console to confirm the AI route is configured for this model:"
-    echo "  http://<manager-host>:8001  →  AI Routes → verify provider and model mapping"
+    echo "Please check the AI Gateway configuration to confirm the route is configured for this model."
     exit 1
 fi
 log "Model test passed (HTTP 200)"

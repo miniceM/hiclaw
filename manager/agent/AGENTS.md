@@ -87,7 +87,6 @@ Skills provide your tools. When you need one, check its `SKILL.md`. Keep local n
 
 ## Key Environment
 
-- Higress Console: http://127.0.0.1:8001 (Session Cookie auth, cookie at `${HIGRESS_COOKIE_FILE}`)
 - Matrix Server: http://127.0.0.1:6167 (direct access)
 - MinIO: http://127.0.0.1:9000 (local access)
 - Registration Token: `${HICLAW_REGISTRATION_TOKEN}` env var
