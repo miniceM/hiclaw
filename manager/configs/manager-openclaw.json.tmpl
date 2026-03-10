@@ -3,10 +3,10 @@
     "mode": "local",
     "port": 18799,
     "auth": {
-      "token": "${MANAGER_GATEWAY_KEY}"
+      "token": "${MANAGER_MATRIX_TOKEN}"
     },
     "remote": {
-      "token": "${MANAGER_GATEWAY_KEY}"
+      "token": "${MANAGER_MATRIX_TOKEN}"
     }
   },
 
@@ -34,9 +34,9 @@
   "models": {
     "mode": "merge",
     "providers": {
-      "hiclaw-gateway": {
-        "baseUrl": "http://${HICLAW_AI_GATEWAY_DOMAIN}:8080/v1",
-        "apiKey": "${MANAGER_GATEWAY_KEY}",
+      "${HICLAW_LLM_PROVIDER}": {
+        "baseUrl": "${HICLAW_LLM_API_URL}",
+        "apiKey": "${HICLAW_LLM_API_KEY}",
         "api": "openai-completions",
         "models": [
           {
@@ -57,7 +57,7 @@
       "timeoutSeconds": 1800,
       "workspace": "~",
       "model": {
-        "primary": "hiclaw-gateway/${HICLAW_DEFAULT_MODEL}"
+        "primary": "${HICLAW_LLM_PROVIDER}/${HICLAW_DEFAULT_MODEL}"
       },
       "maxConcurrent": 8,
       "subagents": {
@@ -80,7 +80,7 @@
 
   "hooks": {
     "enabled": true,
-    "token": "${MANAGER_GATEWAY_KEY}"
+    "token": "${MANAGER_MATRIX_TOKEN}"
   },
 
   "plugins": {

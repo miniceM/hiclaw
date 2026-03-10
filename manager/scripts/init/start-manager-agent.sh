@@ -1,7 +1,7 @@
 #!/bin/bash
 # start-manager-agent.sh - Initialize and start the Manager Agent
 # This is the last component to start (priority 800).
-# It waits for all dependencies, creates Matrix users, configures Higress,
+# It waits for all dependencies, creates Matrix users,
 # creates symlinks for host directory access, and launches OpenClaw.
 
 source /opt/hiclaw/scripts/lib/base.sh
@@ -16,7 +16,6 @@ if [ -n "${TZ}" ] && [ -f "/usr/share/zoneinfo/${TZ}" ]; then
 fi
 
 MATRIX_DOMAIN="${HICLAW_MATRIX_DOMAIN:-matrix-local.hiclaw.io:8080}"
-AI_GATEWAY_DOMAIN="${HICLAW_AI_GATEWAY_DOMAIN:-aigw-local.hiclaw.io}"
 
 # ============================================================
 # Create symlink for host directory access
@@ -47,8 +46,8 @@ else
 fi
 
 # Add local domains to /etc/hosts so they resolve inside the container
-HOSTS_DOMAINS="${MATRIX_DOMAIN%%:*} ${HICLAW_MATRIX_CLIENT_DOMAIN:-matrix-client-local.hiclaw.io} ${AI_GATEWAY_DOMAIN} ${HICLAW_FS_DOMAIN:-fs-local.hiclaw.io}"
-if ! grep -q "${AI_GATEWAY_DOMAIN}" /etc/hosts 2>/dev/null; then
+HOSTS_DOMAINS="${MATRIX_DOMAIN%%:*} ${HICLAW_MATRIX_CLIENT_DOMAIN:-matrix-client-local.hiclaw.io} ${HICLAW_FS_DOMAIN:-fs-local.hiclaw.io}"
+if ! grep -q "${MATRIX_DOMAIN%%:*}" /etc/hosts 2>/dev/null; then
     echo "127.0.0.1 ${HOSTS_DOMAINS}" >> /etc/hosts
     log "Added local domains to /etc/hosts"
 fi
@@ -63,10 +62,6 @@ if [ -f "${SECRETS_FILE}" ]; then
     log "Loaded persisted secrets from ${SECRETS_FILE}"
 fi
 
-if [ -z "${HICLAW_MANAGER_GATEWAY_KEY}" ]; then
-    export HICLAW_MANAGER_GATEWAY_KEY="$(generateKey 32)"
-    log "Auto-generated HICLAW_MANAGER_GATEWAY_KEY"
-fi
 if [ -z "${HICLAW_MANAGER_PASSWORD}" ]; then
     export HICLAW_MANAGER_PASSWORD="$(generateKey 16)"
     log "Auto-generated HICLAW_MANAGER_PASSWORD"
@@ -75,7 +70,6 @@ fi
 # Persist secrets so they survive supervisord restart
 mkdir -p /data
 cat > "${SECRETS_FILE}" <<EOF
-export HICLAW_MANAGER_GATEWAY_KEY="${HICLAW_MANAGER_GATEWAY_KEY}"
 export HICLAW_MANAGER_PASSWORD="${HICLAW_MANAGER_PASSWORD}"
 EOF
 chmod 600 "${SECRETS_FILE}"
@@ -83,8 +77,6 @@ chmod 600 "${SECRETS_FILE}"
 # ============================================================
 # Wait for all dependencies
 # ============================================================
-waitForService "Higress Gateway" "127.0.0.1" 8080 180
-waitForService "Higress Console" "127.0.0.1" 8001 180
 waitForService "Tuwunel" "127.0.0.1" 6167 120
 waitForHTTP "Tuwunel Matrix API" "http://127.0.0.1:6167/_tuwunel/server_version" 120
 waitForService "MinIO" "127.0.0.1" 9000 120
@@ -167,94 +159,23 @@ fi
 log "Manager Matrix token obtained (token prefix: ${MANAGER_TOKEN:0:10}...)"
 
 # ============================================================
-# Initialize Higress Console (Session Cookie auth)
-# ============================================================
-COOKIE_FILE="/tmp/higress-session-cookie"
-
-# Wait for Higress Console Java app to be fully ready (not just port open)
-# The Spring Boot app may take 10-30s after port opens to serve requests.
-# On first boot: /system/init creates admin. On restart: init returns "already initialized".
-# IMPORTANT: Always attempt /system/init first (idempotent), then login.
-log "Waiting for Higress Console to be fully ready and initializing admin..."
-INIT_DONE=false
-for i in $(seq 1 90); do
-    INIT_RESULT=$(curl -s -X POST http://127.0.0.1:8001/system/init \
-        -H 'Content-Type: application/json' \
-        -d '{"adminUser":{"name":"'"${HICLAW_ADMIN_USER}"'","password":"'"${HICLAW_ADMIN_PASSWORD}"'","displayName":"'"${HICLAW_ADMIN_USER}"'"}}' 2>/dev/null) || true
-    if echo "${INIT_RESULT}" | grep -qE '"success":true|already.?init' 2>/dev/null; then
-        INIT_DONE=true
-        break
-    fi
-    if echo "${INIT_RESULT}" | grep -q '"name"' 2>/dev/null; then
-        INIT_DONE=true
-        break
-    fi
-    sleep 2
-done
-
-if [ "${INIT_DONE}" != "true" ]; then
-    log "ERROR: Higress Console did not become ready within 180s"
-    exit 1
-fi
-log "Higress Console init done"
-
-# Login: init uses "name", login uses "username"
-log "Logging into Higress Console..."
-LOGIN_OK=false
-for i in $(seq 1 10); do
-    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8001/session/login \
-        -H 'Content-Type: application/json' \
-        -c "${COOKIE_FILE}" \
-        -d '{"username":"'"${HICLAW_ADMIN_USER}"'","password":"'"${HICLAW_ADMIN_PASSWORD}"'"}' 2>/dev/null) || true
-    if { [ "${HTTP_CODE}" = "200" ] || [ "${HTTP_CODE}" = "201" ]; } && [ -f "${COOKIE_FILE}" ] && [ -s "${COOKIE_FILE}" ]; then
-        LOGIN_OK=true
-        break
-    fi
-    log "Login attempt $i (HTTP ${HTTP_CODE}), retrying in 3s..."
-    sleep 3
-done
-
-if [ "${LOGIN_OK}" != "true" ]; then
-    log "ERROR: Could not login to Higress Console after retries"
-    exit 1
-fi
-log "Higress Console login successful"
-
-# Verify cookie is valid by calling an API endpoint
-VERIFY_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8001/v1/consumers -b "${COOKIE_FILE}" 2>/dev/null) || true
-if [ "${VERIFY_CODE}" = "200" ]; then
-    log "Console session verified (cookie valid)"
-else
-    log "WARNING: Console session may be invalid (verify returned HTTP ${VERIFY_CODE})"
-    # Try re-login with a fresh cookie file
-    rm -f "${COOKIE_FILE}"
-    for i in $(seq 1 5); do
-        curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8001/session/login \
-            -H 'Content-Type: application/json' \
-            -c "${COOKIE_FILE}" \
-            -d '{"username":"'"${HICLAW_ADMIN_USER}"'","password":"'"${HICLAW_ADMIN_PASSWORD}"'"}' 2>/dev/null
-        VERIFY2=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8001/v1/consumers -b "${COOKIE_FILE}" 2>/dev/null) || true
-        if [ "${VERIFY2}" = "200" ]; then
-            log "Re-login successful, session verified"
-            break
-        fi
-        sleep 2
-    done
-fi
-
-export HIGRESS_COOKIE_FILE="${COOKIE_FILE}"
-
-# ============================================================
-# Configure Higress routes, consumers, MCP servers
-# ============================================================
-/opt/hiclaw/scripts/init/setup-higress.sh
-
-# ============================================================
 # Generate Manager Agent openclaw.json from template
 # ============================================================
 log "Generating Manager openclaw.json..."
 export MANAGER_MATRIX_TOKEN="${MANAGER_TOKEN}"
-export MANAGER_GATEWAY_KEY="${HICLAW_MANAGER_GATEWAY_KEY}"
+
+# Resolve LLM provider and API URL from environment variables
+LLM_PROVIDER="${HICLAW_LLM_PROVIDER:-qwen}"
+LLM_API_URL="${HICLAW_LLM_API_URL:-}"
+if [ -z "${LLM_API_URL}" ]; then
+    case "${LLM_PROVIDER}" in
+        qwen) LLM_API_URL="https://dashscope.aliyuncs.com/compatible-mode/v1" ;;
+        openai) LLM_API_URL="https://api.openai.com/v1" ;;
+        *)    LLM_API_URL="" ;;
+    esac
+fi
+export HICLAW_LLM_PROVIDER="${LLM_PROVIDER}"
+export HICLAW_LLM_API_URL="${LLM_API_URL}"
 
 # Resolve model parameters based on model name
 MODEL_NAME="${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}"
@@ -286,23 +207,25 @@ case "${MODEL_NAME}" in
         export MODEL_INPUT='["text"]' ;;
 esac
 
-log "Model: ${MODEL_NAME} (context=${MODEL_CONTEXT_WINDOW}, maxTokens=${MODEL_MAX_TOKENS}, reasoning=${MODEL_REASONING}, input=${MODEL_INPUT})"
+log "Model: ${MODEL_NAME} (provider=${LLM_PROVIDER}, api=${LLM_API_URL}, context=${MODEL_CONTEXT_WINDOW}, maxTokens=${MODEL_MAX_TOKENS}, reasoning=${MODEL_REASONING}, input=${MODEL_INPUT})"
 
 if [ -f /root/manager-workspace/openclaw.json ]; then
     log "Manager openclaw.json already exists, updating dynamic fields only (preserving user customizations)..."
     jq --arg token "${MANAGER_TOKEN}" \
-       --arg key "${HICLAW_MANAGER_GATEWAY_KEY}" \
+       --arg provider "${LLM_PROVIDER}" \
+       --arg apiUrl "${LLM_API_URL}" \
        --arg model "${MODEL_NAME}" \
        --argjson ctx "${MODEL_CONTEXT_WINDOW}" \
        --argjson max "${MODEL_MAX_TOKENS}" \
        --argjson input "${MODEL_INPUT}" \
-       '.channels.matrix.accessToken = $token | .hooks.token = $key | .models.providers["hiclaw-gateway"].apiKey = $key
-        | .models.providers["hiclaw-gateway"].models[0].id = $model
-        | .models.providers["hiclaw-gateway"].models[0].name = $model
-        | .models.providers["hiclaw-gateway"].models[0].contextWindow = $ctx
-        | .models.providers["hiclaw-gateway"].models[0].maxTokens = $max
-        | .models.providers["hiclaw-gateway"].models[0].input = $input
-        | .agents.defaults.model.primary = ("hiclaw-gateway/" + $model)' \
+       '.channels.matrix.accessToken = $token | .hooks.token = $token
+        | .models.providers[$provider].baseUrl = $apiUrl
+        | .models.providers[$provider].models[0].id = $model
+        | .models.providers[$provider].models[0].name = $model
+        | .models.providers[$provider].models[0].contextWindow = $ctx
+        | .models.providers[$provider].models[0].maxTokens = $max
+        | .models.providers[$provider].models[0].input = $input
+        | .agents.defaults.model.primary = ($provider + "/" + $model)' \
        /root/manager-workspace/openclaw.json > /tmp/openclaw.json.tmp && \
         mv /tmp/openclaw.json.tmp /root/manager-workspace/openclaw.json
     # Verify the token was written correctly

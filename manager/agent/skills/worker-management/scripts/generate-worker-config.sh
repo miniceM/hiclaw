@@ -2,9 +2,9 @@
 # generate-worker-config.sh - Generate Worker openclaw.json from template
 #
 # Usage:
-#   generate-worker-config.sh <WORKER_NAME> <MATRIX_TOKEN> <GATEWAY_KEY> [MODEL_ID]
+#   generate-worker-config.sh <WORKER_NAME> <MATRIX_TOKEN> <LLM_API_KEY> [MODEL_ID]
 #
-# Reads env vars: HICLAW_MATRIX_DOMAIN, HICLAW_AI_GATEWAY_DOMAIN, HICLAW_ADMIN_USER, HICLAW_DEFAULT_MODEL
+# Reads env vars: HICLAW_MATRIX_DOMAIN, HICLAW_LLM_PROVIDER, HICLAW_LLM_API_URL, HICLAW_ADMIN_USER, HICLAW_DEFAULT_MODEL
 # Output: ~/hiclaw-fs/agents/<WORKER_NAME>/openclaw.json
 
 set -e
@@ -12,19 +12,29 @@ source /opt/hiclaw/scripts/lib/base.sh
 
 WORKER_NAME="$1"
 WORKER_MATRIX_TOKEN="$2"
-WORKER_GATEWAY_KEY="$3"
+WORKER_LLM_API_KEY="$3"
 MODEL_NAME="${4:-${HICLAW_DEFAULT_MODEL:-qwen3.5-plus}}"
-# Strip provider prefix if caller passed "hiclaw-gateway/<model>" by mistake
-MODEL_NAME="${MODEL_NAME#hiclaw-gateway/}"
+# Strip provider prefix if caller passed "provider/<model>" by mistake
+MODEL_NAME="${MODEL_NAME#*/}"
 
-if [ -z "${WORKER_NAME}" ] || [ -z "${WORKER_MATRIX_TOKEN}" ] || [ -z "${WORKER_GATEWAY_KEY}" ]; then
-    echo "Usage: generate-worker-config.sh <WORKER_NAME> <MATRIX_TOKEN> <GATEWAY_KEY> [MODEL_ID]"
+if [ -z "${WORKER_NAME}" ] || [ -z "${WORKER_MATRIX_TOKEN}" ] || [ -z "${WORKER_LLM_API_KEY}" ]; then
+    echo "Usage: generate-worker-config.sh <WORKER_NAME> <MATRIX_TOKEN> <LLM_API_KEY> [MODEL_ID]"
     exit 1
 fi
 
 MATRIX_DOMAIN="${HICLAW_MATRIX_DOMAIN:-matrix-local.hiclaw.io:8080}"
-AI_GATEWAY_DOMAIN="${HICLAW_AI_GATEWAY_DOMAIN:-aigw-local.hiclaw.io}"
+LLM_PROVIDER="${HICLAW_LLM_PROVIDER:-qwen}"
+LLM_API_URL="${HICLAW_LLM_API_URL:-}"
 ADMIN_USER="${HICLAW_ADMIN_USER:-admin}"
+
+# Resolve LLM API URL if not provided
+if [ -z "${LLM_API_URL}" ]; then
+    case "${LLM_PROVIDER}" in
+        qwen) LLM_API_URL="https://dashscope.aliyuncs.com/compatible-mode/v1" ;;
+        openai) LLM_API_URL="https://api.openai.com/v1" ;;
+        *)    LLM_API_URL="" ;;
+    esac
+fi
 
 # Matrix Domain for user IDs (keep original port like :9080)
 # Matrix Server for connection uses internal port 8080
@@ -63,12 +73,14 @@ GATEWAY_AUTH_TOKEN=$(openssl rand -hex 32)
 export WORKER_NAME
 export WORKER_GATEWAY_AUTH_TOKEN="${GATEWAY_AUTH_TOKEN}"
 export WORKER_MATRIX_TOKEN
-export WORKER_GATEWAY_KEY
+# LLM configuration
+export HICLAW_LLM_PROVIDER="${LLM_PROVIDER}"
+export HICLAW_LLM_API_URL="${LLM_API_URL}"
+export HICLAW_LLM_API_KEY="${WORKER_LLM_API_KEY}"
 # Matrix Server URL uses internal port 8080 for Docker network
 export HICLAW_MATRIX_SERVER="http://${MATRIX_DOMAIN%%:*}:${MATRIX_SERVER_PORT}"
 # Matrix Domain for user IDs keeps original port (e.g., :9080)
 export HICLAW_MATRIX_DOMAIN="${MATRIX_DOMAIN_FOR_ID}"
-export HICLAW_AI_GATEWAY="http://${AI_GATEWAY_DOMAIN}:8080"
 export HICLAW_ADMIN_USER="${ADMIN_USER}"
 export HICLAW_DEFAULT_MODEL="${MODEL_NAME}"
 export MODEL_REASONING=true

@@ -1,28 +1,34 @@
 # ============================================================
-# HiClaw Manager Agent - All-in-One Container
+# HiClaw Manager Agent - All-in-One Container (No Higress)
 # ============================================================
 # Based on openclaw-base (which includes all-in-one + Node.js + OpenClaw)
 # and layers on Tuwunel, MinIO, Element Web, and AI CLI tools.
 #
 # Build args:
-#   HIGRESS_REGISTRY  - base image registry (default: cn-hangzhou)
 #   OPENCLAW_BASE_IMAGE - openclaw-base image (default: hiclaw/openclaw-base:latest)
+#   TUWUNEL_IMAGE       - Tuwunel Matrix server image
+#   MINIO_IMAGE         - MinIO object storage image
+#   MC_IMAGE            - MinIO client image
+#   ELEMENT_WEB_IMAGE   - Element Web image
 # ============================================================
 
-ARG HIGRESS_REGISTRY=higress-registry.cn-hangzhou.cr.aliyuncs.com
 ARG OPENCLAW_BASE_IMAGE=hiclaw/openclaw-base:latest
+ARG TUWUNEL_IMAGE=ghcr.io/girlbossceo/conduwuit:latest
+ARG MINIO_IMAGE=quay.io/minio/minio:latest
+ARG MC_IMAGE=quay.io/minio/mc:latest
+ARG ELEMENT_WEB_IMAGE=vectorim/element-web:latest
 
 # ============ Stage 1: Tuwunel Matrix Server ============
-FROM ${HIGRESS_REGISTRY}/higress/tuwunel:20260216 AS tuwunel
+FROM ${TUWUNEL_IMAGE} AS tuwunel
 
 # ============ Stage 2: MinIO Object Storage ============
-FROM ${HIGRESS_REGISTRY}/higress/minio:20260216 AS minio
+FROM ${MINIO_IMAGE} AS minio
 
 # ============ Stage 3: MinIO Client (mc) ============
-FROM ${HIGRESS_REGISTRY}/higress/mc:20260216 AS mc
+FROM ${MC_IMAGE} AS mc
 
 # ============ Stage 4: Element Web ============
-FROM ${HIGRESS_REGISTRY}/higress/element-web:20260216 AS element-web
+FROM ${ELEMENT_WEB_IMAGE} AS element-web
 
 # ============ Final Image: Based on openclaw-base ============
 # openclaw-base already includes: all-in-one + Node.js 22 + OpenClaw + mcporter + common tools
@@ -76,10 +82,9 @@ RUN chmod +x /opt/hiclaw/scripts/init/*.sh /opt/hiclaw/scripts/lib/*.sh && \
     find /opt/hiclaw/agent/worker-agent/skills/*/scripts -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
 
 # ---- Ports ----
-# 8080: Higress Gateway (unified entry point)
-# 8001: Higress Console
-# 9001: MinIO Console
-EXPOSE 8080 8001 9001
+# 9001: MinIO Console (Element Web is on port 8088, exposed via start-element-web.sh)
+# Note: Higress Gateway (8080) and Console (8001) have been removed
+EXPOSE 9001
 
 # ---- Persistent data ----
 # /data: MinIO object storage, secrets, worker credentials
