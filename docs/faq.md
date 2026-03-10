@@ -28,7 +28,7 @@ docker exec hiclaw-manager cat /opt/hiclaw/agent/.builtin-version
 To install a specific version, use the `HICLAW_VERSION` environment variable during installation:
 
 ```bash
-HICLAW_VERSION=0.1.0 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+HICLAW_VERSION=0.1.0 bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 ---
@@ -58,7 +58,7 @@ The Docker VM may not have enough memory. Increase it to at least 4GB: Docker De
 This is likely caused by stale config data. Re-run the install command from the original install directory and choose **delete and reinstall**:
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 When the installer detects an existing installation, it will ask how to proceed. Choosing delete will wipe the stale data and start fresh.
@@ -132,8 +132,6 @@ In the Higress console, configure the AI route to point to your LLM provider:
 
 - **Single provider**: Set up `default-ai-route` to route requests to your provider.
 - **Multiple providers**: Create multiple AI routes with different model name matching rules (prefix or regex) pointing to each provider.
-
-Reference: [Higress AI Quick Start — Console Configuration](https://higress.ai/en/docs/ai/quick-start#console-configuration)
 
 **Step 2: Tell Manager to switch**
 
@@ -236,7 +234,7 @@ The model's context window size might be misconfigured, causing the window to fi
 If Manager stops responding or you see error codes like 404 or 503, check the Higress AI Gateway log:
 
 ```bash
-docker exec -it hiclaw-manager cat /var/log/hiclaw/higress-gateway.log
+docker logs hiclaw-manager 2>&1 | grep -i higress
 ```
 
 Search the log for the relevant status code. Common causes:

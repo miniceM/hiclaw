@@ -17,7 +17,7 @@
 **方式 A：一键安装**
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 按照交互提示配置：

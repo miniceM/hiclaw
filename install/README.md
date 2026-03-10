@@ -18,7 +18,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/higress-group/hiclaw/main/in
 ### Windows (PowerShell 7+)
 
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
+Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.ps1'))
 ```
 
 ## Installation Modes

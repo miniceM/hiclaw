@@ -19,7 +19,7 @@ This guide walks you through installing HiClaw, creating your first Agent team, 
 **Option A: One-line install**
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 Follow the interactive prompts to configure:

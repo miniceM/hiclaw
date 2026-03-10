@@ -28,7 +28,7 @@ docker exec hiclaw-manager cat /opt/hiclaw/agent/.builtin-version
 安装时指定版本：
 
 ```bash
-HICLAW_VERSION=0.1.0 bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+HICLAW_VERSION=0.1.0 bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 ---
@@ -55,7 +55,7 @@ docker exec -it hiclaw-manager cat /var/log/hiclaw/manager-agent.log
 可能是配置脏数据导致的。建议到原安装目录重新执行安装命令，选择**删除重装**：
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 安装脚本检测到已有安装时会询问处理方式，选择删除后重装即可清除脏数据。
@@ -143,8 +143,6 @@ Manager 会使用模型切换技能完成配置更新。
 **多供应商情况**
 
 在 Higress 控制台，创建多条 AI 路由，每条路由配置不同的模型名匹配规则（前缀或正则），分别指向对应的供应商。之后的流程与单供应商完全一致——告诉 Manager 模型名，它会自动完成测试和切换。
-
-参考：[Higress AI 快速开始 — 控制台配置](https://higress.ai/docs/ai/quick-start#%E6%8E%A7%E5%88%B6%E5%8F%B0%E9%85%8D%E7%BD%AE)
 
 ---
 
@@ -237,7 +235,7 @@ docker exec -it <worker-name> openclaw tui
 如果 Manager 没有响应，或者返回了 404、503 等状态码，查看 Higress AI 网关日志：
 
 ```bash
-docker exec -it hiclaw-manager cat /var/log/hiclaw/higress-gateway.log
+docker logs hiclaw-manager 2>&1 | grep -i higress
 ```
 
 在日志中搜索对应的状态码，常见原因：

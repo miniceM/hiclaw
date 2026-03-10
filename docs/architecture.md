@@ -7,8 +7,6 @@ HiClaw is an Agent Teams system that enables multiple AI Agents to collaborate v
 ```mermaid
 graph TB
     subgraph Manager Container
-        HG[Higress AI Gateway<br/>:8080 internal]
-        HC[Higress Console<br/>:8001 internal]
         TW[Tuwunel Matrix Server<br/>:6167 internal]
         EW[Element Web / Nginx<br/>:8088 internal]
         MO[MinIO<br/>:9000 / :9001 internal]
@@ -28,45 +26,26 @@ graph TB
         WMP2[mcporter]
     end
 
-    Human[Human Admin<br/>Browser] -->|Element Web| HG
+    Human[Human Admin<br/>Browser] -->|Element Web| EW
     Human -->|IM| TW
-    
-    HG -->|Matrix| TW
-    HG -->|Files| MO
-    HG -->|LLM API| LLM[LLM Provider]
-    HG -->|MCP| GitHub[GitHub API]
-    
+
     MA -->|Matrix| TW
-    MA -->|Higress API| HC
+    MA -->|LLM API| LLM[LLM Provider]
+    MA -->|GitHub MCP| GitHub[GitHub API]
     MC <-->|sync| MO
 
-    WA -->|Matrix via Gateway| HG
+    WA -->|Matrix| TW
+    WA -->|LLM API| LLM
     WMC <-->|file sync| MO
-    WMP -->|MCP tools| HG
-    
-    WB -->|Matrix via Gateway| HG
+    WMP -->|MCP tools| GitHub
+
+    WB -->|Matrix| TW
+    WB -->|LLM API| LLM
     WMC2 <-->|file sync| MO
-    WMP2 -->|MCP tools| HG
+    WMP2 -->|MCP tools| GitHub
 ```
 
 ## Component Details
-
-### AI Gateway (Higress)
-
-Higress serves as the unified entry point for all external access:
-
-| Port | Service | Purpose |
-|------|---------|---------|
-| 8080 | Gateway | Reverse proxy for all domain-based routing (exposed as 18080 by default) |
-| 8001 | Console | Management API (Session Cookie auth, exposed as 18001 by default) |
-
-**Routes configured:**
-- `matrix-local.hiclaw.io` -> Tuwunel (port 6167) - Matrix Homeserver
-- `matrix-client-local.hiclaw.io` -> Element Web (port 8088) - IM web client
-- `fs-local.hiclaw.io` -> MinIO (port 9000) - HTTP file system (auth required)
-- `aigw-local.hiclaw.io` -> AI Gateway - LLM proxy + MCP servers (auth required)
-
-> All domain-based routes go through the gateway on port 8080 (host: 18080). Element Web is also directly accessible on host port 18088 (maps to container port 8088).
 
 ### Matrix Homeserver (Tuwunel)
 
@@ -87,7 +66,7 @@ MinIO provides centralized file storage accessible via HTTP:
 
 The Manager Agent coordinates the entire team:
 - Receives tasks from human via Matrix DM **or any other configured channel** (Discord, Feishu, Telegram, etc.)
-- Creates Workers (Matrix accounts + Higress consumers + config files)
+- Creates Workers (Matrix accounts + config files + environment variables)
 - Assigns and tracks tasks
 - Runs heartbeat checks (triggered by OpenClaw's built-in heartbeat mechanism)
 - Manages credentials and access control
@@ -95,6 +74,7 @@ The Manager Agent coordinates the entire team:
 - Monitors Matrix room session expiry and sends keepalive messages on request
 - Routes daily notifications to the admin's **primary channel** (with Matrix DM fallback)
 - Supports **cross-channel escalation**: sends urgent questions to the admin's primary channel and routes replies back to originating Matrix rooms
+- Manages LLM API keys and MCP Server credentials, securely injected into Worker containers via environment variables
 
 ### Worker Agent (OpenClaw)
 
@@ -102,6 +82,7 @@ Workers are lightweight, stateless containers:
 - Pull all config from MinIO on startup
 - Communicate via Matrix Rooms (Human + Manager + Worker in each Room)
 - Use mcporter CLI to call MCP Server tools (GitHub, etc.)
+- LLM API keys and MCP credentials injected via environment variables from Manager, not stored in config files
 - Can be destroyed and recreated without losing state
 - Manager can create Workers directly via the host container runtime socket (Docker/Podman), or provide a `docker run` command for manual/remote deployment
 
@@ -109,19 +90,29 @@ Workers are lightweight, stateless containers:
 
 ```
 ┌──────────────────────────────────────┐
-│            Higress Gateway           │
-│   Consumer key-auth (BEARER token)   │
+│         Manager Container             │
+│   Environment Variable Injection      │
+│         (Docker --env)                │
 │                                      │
-│  manager: full access                │
-│  worker-alice: AI + FS + MCP(github) │
-│  worker-bob:   AI + FS              │
+│  HICLAW_LLM_API_KEY (LLM secret)      │
+│  HICLAW_GITHUB_TOKEN (MCP credential) │
+└──────────────────────────────────────┘
+           │
+           ▼
+┌──────────────────────────────────────┐
+│         Worker Container              │
+│   OpenClaw reads environment vars     │
+│                                      │
+│  openclaw.json: "$HICLAW_LLM_API_KEY"│
+│  mcporter-servers.json: env injection │
 └──────────────────────────────────────┘
 ```
 
-- Each Worker has a unique Consumer with key-auth BEARER token
-- Manager controls which routes and MCP Servers each Worker can access
-- External API credentials (GitHub PAT, etc.) stored centrally in MCP Server config
-- Workers never see external API credentials directly
+- LLM API keys and MCP Server credentials (e.g., GitHub Token) are stored in Manager container environment variables
+- When creating Workers, Manager injects credentials into Worker containers via Docker `--env` flags
+- Worker's `openclaw.json` uses `$HICLAW_LLM_API_KEY` syntax (single dollar sign) to instruct OpenClaw to read from environment variables at runtime
+- MCP Server credentials are passed to local MCP processes via the `env` field in `mcporter-servers.json`
+- No sensitive credentials are stored in MinIO or configuration files
 
 ## Communication Model
 

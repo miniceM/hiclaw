@@ -2,10 +2,9 @@
 
 All-in-one Manager Agent container. Includes:
 
-- **Higress AI Gateway** (port 8080 gateway, 8001 console): LLM proxy, MCP Server hosting, consumer auth
 - **Tuwunel Matrix Server** (port 6167): Agent IM communication
 - **MinIO** (port 9000 API, 9001 console): Centralized HTTP file system
-- **Element Web** (via Nginx on port 8088, proxied through Higress): Browser-based IM client
+- **Element Web** (via Nginx on port 8088): Browser-based IM client
 - **Manager Agent** (OpenClaw): Coordinates Workers, manages credentials, assigns tasks
 - **mc mirror**: Bidirectional file sync between MinIO and local filesystem
 
