@@ -242,13 +242,13 @@ HiClaw's built-in Matrix server supports multiple clients:
 **macOS / Linux:**
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 **Windows (PowerShell 7+):**
 
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
+Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.ps1'))
 ```
 
 > ⚠️ Windows users need **PowerShell 7+** and **Docker Desktop** first.
@@ -503,7 +503,7 @@ HiClaw is for you.
 **Start now:**
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 ---

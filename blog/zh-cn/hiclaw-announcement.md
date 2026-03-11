@@ -243,13 +243,13 @@ HiClaw 内置 Matrix 服务器，支持多种客户端：
 **macOS / Linux：**
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 **Windows（PowerShell 7+）：**
 
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://higress.ai/hiclaw/install.ps1'))
+Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.ps1'))
 ```
 
 > ⚠️ Windows 用户需要先安装 **PowerShell 7+** 和 **Docker Desktop**。
@@ -504,7 +504,7 @@ HiClaw 就是为你准备的。
 **现在就开始：**
 
 ```bash
-bash <(curl -sSL https://higress.ai/hiclaw/install.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/nicepkg/hiclaw/main/install/hiclaw-install.sh)
 ```
 
 ---
